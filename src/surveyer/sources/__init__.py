@@ -37,10 +37,13 @@ def build_registry(search: SearchConfig, cache_root: str | Path) -> dict[str, So
                 year_max=search.year_max,
             )
         elif name == "semantic_scholar":
+            headers = make_headers()
+            log.info(
+                "semantic_scholar.auth",
+                api_key="present" if headers else "absent (expect 429s)",
+            )
             registry[name] = SemanticScholarSource(
-                HttpClient(
-                    cache_dir=cache / "s2", min_interval=1.0, headers=make_headers()
-                )
+                HttpClient(cache_dir=cache / "s2", min_interval=1.1, headers=headers)
             )
         elif name == "google_scholar":
             registry[name] = GoogleScholarSource()
