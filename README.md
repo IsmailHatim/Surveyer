@@ -1,8 +1,17 @@
-# Surveyer
 <div align="center">
-  <img src="figures/surveyer_logo.png" alt="Surveyer logo" width="400"/>
+  <img src="figures/surveyer_logo.png" alt="Surveyer logo" width="300"/>
 </div>
 
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11+-informational?logo=python&logoColor=white"></a>
+  <a href="https://docs.astral.sh/uv/"><img alt="managed with uv" src="https://img.shields.io/badge/uv-managed-blueviolet?logo=uv&logoColor=white"></a>
+  <a href="https://github.com/astral-sh/ruff"><img alt="Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json"></a>
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-success">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey">
+  <a href="https://github.com/IsmailHatim/Surveyer/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/IsmailHatim/Surveyer?logo=github&color=yellow"></a>
+  <a href="https://github.com/IsmailHatim/Surveyer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/IsmailHatim/Surveyer?color=orange"></a>
+  <a href="https://github.com/IsmailHatim/Surveyer/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/IsmailHatim/Surveyer?color=teal"></a>
+</p>
 
 Surveyer is an open source Literature search tool for academic surveys: fetch from
 multiple sources, deduplicate, filter (keyword and LLM relevance), export to Excel,
