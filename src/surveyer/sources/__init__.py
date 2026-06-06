@@ -25,7 +25,10 @@ def build_registry(search: SearchConfig, cache_root: str | Path) -> dict[str, So
     for name in search.sources:
         if name == "dblp":
             registry[name] = DblpSource(
-                HttpClient(cache_dir=cache / "dblp", min_interval=0.5)
+                # DBLP throttles hard and signals it inconsistently (500/429/
+                # dropped connections, often with no Retry-After), so we space
+                # requests out and retry patiently.
+                HttpClient(cache_dir=cache / "dblp", min_interval=2.0, max_retries=6)
             )
         elif name == "openalex":
             registry[name] = OpenAlexSource(

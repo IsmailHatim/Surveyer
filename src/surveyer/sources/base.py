@@ -37,6 +37,7 @@ class HttpClient:
         min_interval: float = 0.0,
         max_retries: int = 4,
         backoff: float = 1.0,
+        max_backoff: float = 60.0,
         headers: dict[str, str] | None = None,
     ) -> None:
         """Initialise the client with cache directory and retry settings."""
@@ -48,7 +49,14 @@ class HttpClient:
         self.min_interval = min_interval
         self.max_retries = max_retries
         self.backoff = backoff
+        self.max_backoff = max_backoff
         self._last_call = 0.0
+
+    def _retry_wait(self, attempt: int, retry_after: str | None = None) -> float:
+        """Exponential backoff, capped, with the server's Retry-After winning."""
+        if retry_after and retry_after.isdigit():
+            return float(retry_after)
+        return min(self.backoff * (2 ** (attempt - 1)), self.max_backoff)
 
     def _cache_path(self, url: str, params: dict) -> Path:
         key = json.dumps({"url": url, "params": params}, sort_keys=True)
@@ -70,19 +78,17 @@ class HttpClient:
                     "http.transport_error", url=url, attempt=attempt, error=str(exc)
                 )
                 if attempt < self.max_retries:
-                    time.sleep(self.backoff * attempt)
+                    time.sleep(self._retry_wait(attempt))
                     continue
                 raise
             if resp.status_code == 429 or resp.status_code >= 500:
-                wait = self.backoff * attempt
-                retry_after = resp.headers.get("Retry-After")
-                if retry_after and retry_after.isdigit():
-                    wait = float(retry_after)
                 log.warning(
                     "http.retry", url=url, status=resp.status_code, attempt=attempt
                 )
                 if attempt < self.max_retries:
-                    time.sleep(wait)
+                    time.sleep(
+                        self._retry_wait(attempt, resp.headers.get("Retry-After"))
+                    )
                     continue
             resp.raise_for_status()
             data = resp.json()
