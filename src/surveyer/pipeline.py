@@ -11,7 +11,7 @@ from surveyer.config import SurveyConfig
 from surveyer.dedup import deduplicate
 from surveyer.export import export_xlsx
 from surveyer.filtering.keyword import apply_keyword_filter
-from surveyer.filtering.llm import Scorer, apply_llm_filter
+from surveyer.filtering.llm import Scorer, apply_llm_filter, build_scorer
 from surveyer.ledger import save_ledger
 from surveyer.models import Ledger, Record, SourceCount
 from surveyer.prisma import render_prisma
@@ -62,12 +62,12 @@ def run_pipeline(
     # 4. LLM filter
     if cfg.filter.llm.enabled:
         if scorer is None:
-            from surveyer.filtering.llm import CachingScorer, OpenAIScorer
+            from surveyer.filtering.llm import CachingScorer
 
             scorer = CachingScorer(
-                OpenAIScorer(model=cfg.filter.llm.model),
+                build_scorer(cfg.filter.llm),
                 cache_root / "llm",
-                namespace=cfg.filter.llm.model,
+                namespace=f"{cfg.filter.llm.provider}:{cfg.filter.llm.model}",
             )
         after_llm, excluded_llm = apply_llm_filter(after_kw, cfg.filter.llm, scorer)
     else:
