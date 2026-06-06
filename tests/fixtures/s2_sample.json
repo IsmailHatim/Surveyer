@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "title": "Federated Learning Privacy",
+      "abstract": "We study privacy in federated learning.",
+      "year": 2021,
+      "citationCount": 17,
+      "externalIds": {"DOI": "10.1109/TIFS.2021.123456"},
+      "venue": "IEEE TIFS",
+      "url": "https://www.semanticscholar.org/paper/abc",
+      "authors": [{"name": "Alice Smith"}, {"name": "Bob Jones"}]
+    }
+  ]
+}

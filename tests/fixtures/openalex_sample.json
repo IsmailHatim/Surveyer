@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "doi": "https://doi.org/10.1145/3292500",
+      "title": "Deep Learning for Security",
+      "publication_year": 2019,
+      "cited_by_count": 42,
+      "primary_location": {"source": {"display_name": "ACM Computing Surveys"}},
+      "authorships": [
+        {"author": {"display_name": "Jane Roe"}},
+        {"author": {"display_name": "John Doe"}}
+      ],
+      "abstract_inverted_index": {"Deep": [0], "secure": [1], "models": [2]}
+    }
+  ]
+}

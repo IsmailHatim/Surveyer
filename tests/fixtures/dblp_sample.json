@@ -1,0 +1,19 @@
+{
+  "result": {
+    "hits": {
+      "@total": "1",
+      "hit": [
+        {
+          "info": {
+            "authors": {"author": [{"text": "Ashish Vaswani"}, {"text": "Noam Shazeer"}]},
+            "title": "Attention Is All You Need.",
+            "venue": "NeurIPS",
+            "year": "2017",
+            "doi": "10.5555/3295222.3295349",
+            "ee": "https://arxiv.org/abs/1706.03762"
+          }
+        }
+      ]
+    }
+  }
+}

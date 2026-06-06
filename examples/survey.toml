@@ -1,0 +1,31 @@
+[project]
+name = "secure-aggregation-survey"
+output_dir = "runs/secure-aggregation"
+
+[search]
+year_min = 2018
+year_max = 2026
+max_results_per_query = 200
+sources = ["dblp", "openalex", "semantic_scholar"] # Add "google_scholar" to enable Scholar (pip install surveyer[scholar]).
+
+[[search.queries]]
+label = "A_attacks"
+terms = "model poisoning attacks federated learning"
+
+[[search.queries]]
+label = "B_defenses"
+terms = "secure aggregation privacy federated learning"
+
+[filter.keyword]
+include = ["federated", "secure"]
+exclude = ["survey", "review", "tutorial"]
+
+[filter.llm]
+enabled = false
+provider = "openai"
+model = "gpt-4o-mini"
+threshold = 0.6
+survey_abstract = """
+We survey secure-aggregation protocols for federated learning, covering threat
+models, cryptographic building blocks, and robustness to poisoning.
+"""

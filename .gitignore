@@ -1,0 +1,19 @@
+# Envionment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.ty_cache/
+
+# OS noise
+.DS_Store
+
+# Runs
+runs/
