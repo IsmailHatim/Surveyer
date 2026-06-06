@@ -15,6 +15,8 @@ VALID_SOURCES = {
     "agent",
 }
 
+VALID_LLM_PROVIDERS = {"openai", "ollama"}
+
 
 class ProjectConfig(msgspec.Struct, kw_only=True):
     """Project configuration."""
@@ -53,6 +55,7 @@ class LLMConfig(msgspec.Struct, kw_only=True):
     enabled: bool = False
     provider: str = "openai"
     model: str = "gpt-4o-mini"
+    host: str = "http://localhost:11434"
     threshold: float = 0.5
     survey_abstract: str = ""
 
@@ -83,6 +86,13 @@ def load_config(path: str | Path) -> SurveyConfig:
     unknown = set(cfg.search.sources) - VALID_SOURCES
     if unknown:
         raise ValueError(f"Unknown source(s): {', '.join(sorted(unknown))}")
+    if cfg.filter.llm.provider not in VALID_LLM_PROVIDERS:
+        raise ValueError(
+            f"Unknown LLM provider: {cfg.filter.llm.provider!r}. "
+            f"Valid providers: {', '.join(sorted(VALID_LLM_PROVIDERS))}"
+        )
+    if cfg.filter.llm.provider == "ollama" and not cfg.filter.llm.host.strip():
+        raise ValueError('filter.llm.host must be set when provider = "ollama"')
     if cfg.filter.llm.enabled and not cfg.filter.llm.survey_abstract.strip():
         raise ValueError(
             "filter.llm.survey_abstract must be set when filter.llm.enabled = true"

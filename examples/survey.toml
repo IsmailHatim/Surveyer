@@ -6,7 +6,7 @@ output_dir = "runs/secure-aggregation"
 year_min = 2018
 year_max = 2026
 max_results_per_query = 200
-sources = ["dblp", "openalex", "semantic_scholar"] # Add "google_scholar" to enable Scholar (pip install surveyer[scholar]).
+sources = ["dblp", "openalex", "semantic_scholar", "google_scholar"] # Add "google_scholar" to enable Scholar (pip install surveyer[scholar]).
 
 [[search.queries]]
 label = "A_attacks"
@@ -22,8 +22,10 @@ exclude = ["survey", "review", "tutorial"]
 
 [filter.llm]
 enabled = false
-provider = "openai"
+provider = "openai" # or "ollama"
 model = "gpt-4o-mini"
+# To score locally with Ollama instead of OpenAI you need:
+#   host = "http://localhost:11434"   # or a networked Ollama server on your LAN
 threshold = 0.6
 survey_abstract = """
 We survey secure-aggregation protocols for federated learning, covering threat

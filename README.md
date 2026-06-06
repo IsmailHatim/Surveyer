@@ -27,6 +27,8 @@ survey as new papers come out or share it with collaborators.
 uv sync
 # optional Google Scholar support:
 uv sync --extra scholar
+# optional local LLM scoring via Ollama:
+uv sync --extra ollama
 ```
 
 ## Configure
@@ -46,6 +48,16 @@ Or keep them in the `.env` file and load it automatically:
 ```bash
 uv run --env-file .env surveyer run --config examples/survey.toml
 ```
+
+### LLM scoring provider
+
+LLM relevance scoring runs through `filter.llm`. Two providers are supported:
+
+- `openai` (default) — set `OPENAI_API_KEY`.
+- `ollama` — runs a local or networked [Ollama](https://ollama.com) model, no
+  API key needed. Install the extra (`uv sync --extra ollama`), then set
+  `provider = "ollama"`, the `model` name, and `host` (default
+  `http://localhost:11434`; point it at any Ollama server on your network).
 
 ## Run
 
