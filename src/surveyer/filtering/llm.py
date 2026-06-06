@@ -64,6 +64,55 @@ class OpenAIScorer:
         return float(score), str(data.get("reason", ""))
 
 
+class OllamaScorer:
+    """Ollama scorer talking to a local or networked Ollama server."""
+
+    def __init__(
+        self, model: str = "llama3.1", host: str = "http://localhost:11434"
+    ) -> None:
+        """Initialise the scorer with an Ollama model name and server host."""
+        try:
+            from ollama import Client
+        except ImportError as exc:
+            raise RuntimeError(
+                "Ollama needs the optional extra: pip install surveyer[ollama]"
+            ) from exc
+
+        self.model = model
+        self.client = Client(host=host)
+
+    def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
+        """Score a record against the survey abstract via the Ollama chat API."""
+        prompt = _PROMPT.format(
+            survey=survey_abstract,
+            title=record.title,
+            abstract=record.abstract or "(no abstract)",
+        )
+        resp = self.client.chat(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            format="json",
+            options={"temperature": 0},
+        )
+        content = resp["message"]["content"]
+        if not content:
+            raise ValueError("LLM response had no content")
+        data = json.loads(content)
+        score = data.get("score")
+        if not isinstance(score, (int, float)):
+            raise ValueError(f"LLM response missing numeric score: {data!r}")
+        return float(score), str(data.get("reason", ""))
+
+
+def build_scorer(cfg: LLMConfig) -> Scorer:
+    """Build a Scorer for the configured provider."""
+    if cfg.provider == "openai":
+        return OpenAIScorer(model=cfg.model)
+    if cfg.provider == "ollama":
+        return OllamaScorer(model=cfg.model, host=cfg.host)
+    raise ValueError(f"Unknown LLM provider: {cfg.provider!r}")
+
+
 class CachingScorer:
     """Wrap a Scorer, caching results on disk to avoid rescoring."""
 
@@ -103,8 +152,10 @@ def apply_llm_filter(
     if not cfg.enabled:
         return records, 0
 
+    total = len(records)
     kept: list[Record] = []
-    for r in records:
+    for i, r in enumerate(records, start=1):
+        log.info("llm.scoring", done=i, total=total, title=r.title)
         try:
             value, reason = scorer.score(cfg.survey_abstract, r)
         except Exception as exc:
@@ -116,4 +167,5 @@ def apply_llm_filter(
         r.llm_reason = reason
         if value >= cfg.threshold:
             kept.append(r)
+    log.info("llm.scoring_done", total=total, kept=len(kept))
     return kept, len(records) - len(kept)
