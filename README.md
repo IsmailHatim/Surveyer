@@ -2,6 +2,8 @@
   <img src="figures/surveyer_logo.png" alt="Surveyer logo" width="300"/>
 </div>
 
+<br>
+
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11+-informational?logo=python&logoColor=white"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="managed with uv" src="https://img.shields.io/badge/uv-managed-blueviolet?logo=uv&logoColor=white"></a>
