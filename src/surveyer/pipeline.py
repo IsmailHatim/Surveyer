@@ -60,15 +60,15 @@ def run_pipeline(
     dropped: list[Record] = [r for r in deduped if id(r) not in kept_kw_ids]
 
     # 4. LLM filter
-    if cfg.filter.llm.enabled and scorer is None:
-        from surveyer.filtering.llm import CachingScorer, OpenAIScorer
-
-        scorer = CachingScorer(
-            OpenAIScorer(model=cfg.filter.llm.model),
-            cache_root / "llm",
-            namespace=cfg.filter.llm.model,
-        )
     if cfg.filter.llm.enabled:
+        if scorer is None:
+            from surveyer.filtering.llm import CachingScorer, OpenAIScorer
+
+            scorer = CachingScorer(
+                OpenAIScorer(model=cfg.filter.llm.model),
+                cache_root / "llm",
+                namespace=cfg.filter.llm.model,
+            )
         after_llm, excluded_llm = apply_llm_filter(after_kw, cfg.filter.llm, scorer)
     else:
         after_llm, excluded_llm = after_kw, 0

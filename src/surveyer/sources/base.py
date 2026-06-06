@@ -63,7 +63,16 @@ class HttpClient:
 
         for attempt in range(1, self.max_retries + 1):
             self._throttle()
-            resp = self._client.get(url, params=params)
+            try:
+                resp = self._client.get(url, params=params)
+            except httpx.TransportError as exc:
+                log.warning(
+                    "http.transport_error", url=url, attempt=attempt, error=str(exc)
+                )
+                if attempt < self.max_retries:
+                    time.sleep(self.backoff * attempt)
+                    continue
+                raise
             if resp.status_code == 429 or resp.status_code >= 500:
                 wait = self.backoff * attempt
                 retry_after = resp.headers.get("Retry-After")

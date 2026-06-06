@@ -54,7 +54,10 @@ class OpenAIScorer:
             response_format={"type": "json_object"},
             temperature=0,
         )
-        data = json.loads(resp.choices[0].message.content)
+        content = resp.choices[0].message.content
+        if content is None:
+            raise ValueError("LLM response had no content")
+        data = json.loads(content)
         score = data.get("score")
         if not isinstance(score, (int, float)):
             raise ValueError(f"LLM response missing numeric score: {data!r}")
