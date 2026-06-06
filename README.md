@@ -38,7 +38,7 @@ Set credentials in your environment:
 
 ```bash
 export OPENAI_API_KEY=sk-...
-export SEMANTIC_SCHOLAR_API_KEY=...   # optional, raises rate limits
+export SEMANTIC_SCHOLAR_API_KEY=...   # strongly recommended
 ```
 
 Or keep them in the `.env` file and load it automatically:
@@ -66,12 +66,16 @@ uv run surveyer prisma --config examples/survey.toml
 |-------------------|---------|-----------------------------------------|
 | DBLP              | no      | CS bibliography                         |
 | OpenAlex          | no      | broad coverage, abstracts               |
-| Semantic Scholar  | optional| abstracts, citations                    |
+| Semantic Scholar  | recommended | abstracts, citations                |
 | Google Scholar    | no      | optional extra; fragile, off by default |
-| Agent web search  | -       | TODO            |
+| Agent web search  | -       | TODO                                    |
 
 ## Outputs
 
 - `survey.xlsx` - `papers`, `excluded`, and `summary` sheets.
 - `ledger.json` - per-stage counts (the input to PRISMA).
 - `prisma.png` - PRISMA flow diagram.
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Ismail Hatim.
