@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import polars as pl
 import xlsxwriter
 
 from surveyer.models import Ledger, Record
 
+if TYPE_CHECKING:
+    from polars._typing import (
+        ColumnWidthsDefinition,
+        ConditionalFormatDict,
+        SchemaDict,
+    )
+
 # Explicit schema so polars never infers a column type from a leading run of
 # null values (e.g. records with no llm_score) and then chokes on a later float.
-_SCHEMA: dict[str, pl.DataType] = {
+_SCHEMA: SchemaDict = {
     "title": pl.Utf8,
     "authors": pl.Utf8,
     "year": pl.Int64,
@@ -40,7 +48,7 @@ _HEADER_FORMAT = {
 
 # Fixed column widths (in pixels, as polars expects) instead of autofit, so
 # every column keeps a predictable size and the sheet fits on one screen.
-_COLUMN_WIDTHS = {
+_COLUMN_WIDTHS: ColumnWidthsDefinition = {
     "title": 290,
     "authors": 200,
     "year": 50,
@@ -57,7 +65,7 @@ _COLUMN_WIDTHS = {
 }
 
 # Yellow (low) to green (high) colour scale over the 0..1 llm_score.
-_SCORE_COLOR_SCALE = {
+_SCORE_COLOR_SCALE: ConditionalFormatDict = {
     "llm_score": {
         "type": "2_color_scale",
         "min_type": "num",
