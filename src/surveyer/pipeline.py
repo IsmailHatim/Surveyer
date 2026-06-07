@@ -54,7 +54,9 @@ def run_pipeline(
     ledger.duplicates_removed = removed
 
     # 3. Keyword filter
-    after_kw, excluded_kw = apply_keyword_filter(deduped, cfg.filter.keyword)
+    after_kw, excluded_kw = apply_keyword_filter(
+        deduped, cfg.filter.keyword, concepts=cfg.filter.concepts
+    )
     ledger.excluded_keyword = excluded_kw
     kept_kw_ids = {id(r) for r in after_kw}
     dropped: list[Record] = [r for r in deduped if id(r) not in kept_kw_ids]
