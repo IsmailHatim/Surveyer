@@ -9,21 +9,25 @@ import xlsxwriter
 
 from surveyer.models import Ledger, Record
 
-_COLUMNS = [
-    "title",
-    "authors",
-    "year",
-    "venue",
-    "doi",
-    "url",
-    "abstract",
-    "keywords",
-    "n_citations",
-    "sources",
-    "query_labels",
-    "llm_score",
-    "llm_reason",
-]
+# Explicit schema so polars never infers a column type from a leading run of
+# null values (e.g. records with no llm_score) and then chokes on a later float.
+_SCHEMA: dict[str, pl.DataType] = {
+    "title": pl.Utf8,
+    "authors": pl.Utf8,
+    "year": pl.Int64,
+    "venue": pl.Utf8,
+    "doi": pl.Utf8,
+    "url": pl.Utf8,
+    "abstract": pl.Utf8,
+    "keywords": pl.Utf8,
+    "n_citations": pl.Int64,
+    "sources": pl.Utf8,
+    "query_labels": pl.Utf8,
+    "llm_score": pl.Float64,
+    "llm_reason": pl.Utf8,
+}
+
+_COLUMNS = list(_SCHEMA)
 
 # Bold, shaded header row applied to every sheet.
 _HEADER_FORMAT = {
@@ -32,6 +36,24 @@ _HEADER_FORMAT = {
     "border": 1,
     "align": "center",
     "valign": "vcenter",
+}
+
+# Fixed column widths (in pixels, as polars expects) instead of autofit, so
+# every column keeps a predictable size and the sheet fits on one screen.
+_COLUMN_WIDTHS = {
+    "title": 290,
+    "authors": 200,
+    "year": 50,
+    "venue": 130,
+    "doi": 150,
+    "url": 190,
+    "abstract": 360,
+    "keywords": 170,
+    "n_citations": 70,
+    "sources": 100,
+    "query_labels": 110,
+    "llm_score": 75,
+    "llm_reason": 290,
 }
 
 # Yellow (low) to green (high) colour scale over the 0..1 llm_score.
@@ -68,9 +90,7 @@ def _to_frame(records: list[Record]) -> pl.DataFrame:
                 "llm_reason": r.llm_reason,
             }
         )
-    if not rows:
-        return pl.DataFrame({c: [] for c in _COLUMNS})
-    return pl.DataFrame(rows).select(_COLUMNS)
+    return pl.DataFrame(rows, schema=_SCHEMA).select(_COLUMNS)
 
 
 def _summary_frame(ledger: Ledger) -> pl.DataFrame:
@@ -112,7 +132,7 @@ def export_xlsx(
             worksheet="papers",
             header_format=_HEADER_FORMAT,
             conditional_formats=_SCORE_COLOR_SCALE,
-            autofit=True,
+            column_widths=_COLUMN_WIDTHS,
             freeze_panes=(1, 0),
         )
         _to_frame(excluded).write_excel(
@@ -120,7 +140,7 @@ def export_xlsx(
             worksheet="excluded",
             header_format=_HEADER_FORMAT,
             conditional_formats=_SCORE_COLOR_SCALE,
-            autofit=True,
+            column_widths=_COLUMN_WIDTHS,
             freeze_panes=(1, 0),
         )
         _summary_frame(ledger).write_excel(
