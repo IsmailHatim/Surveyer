@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from surveyer.config import SearchConfig, Query
+import structlog
+
+from surveyer.config import Query, SearchConfig
 from surveyer.models import Record
 from surveyer.sources import fetch_all
 
@@ -49,3 +51,43 @@ def test_fetch_all_tags_provenance():
     assert {lbl for r in records for lbl in r.query_labels} == {"A", "B"}
     assert counts["fake"] == 2
     assert failed == []
+
+
+def test_fetch_all_uses_resolved_queries():
+    seen: list[str] = []
+
+    class RecordingSource:
+        name = "rec"
+
+        def search(self, terms, *, max_results):
+            seen.append(terms)
+            return []
+
+    search = SearchConfig(
+        sources=["rec"],
+        queries=[Query(label="manual", terms="hand written")],
+        concepts={"a": ["x", "y"]},
+        max_results_per_query=10,
+    )
+    fetch_all(search, {"rec": RecordingSource()})
+    assert seen == ["hand written", "x", "y"]
+
+
+def test_fetch_all_warns_once_across_sources():
+    big = [f"s{i}" for i in range(11)]  # > 100
+
+    class EmptySource:
+        def search(self, terms, *, max_results):
+            return []
+
+    search = SearchConfig(
+        sources=["a", "b"],
+        queries=[],
+        concepts={"a": big, "b": big},
+        max_results_per_query=10,
+    )
+    registry = {"a": EmptySource(), "b": EmptySource()}
+    with structlog.testing.capture_logs() as logs:
+        fetch_all(search, registry)
+    warnings = [e for e in logs if e["event"] == "concepts.explosion"]
+    assert len(warnings) == 1

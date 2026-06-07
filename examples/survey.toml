@@ -17,8 +17,17 @@ terms = "model poisoning attacks federated learning"
 label = "B_defenses"
 terms = "secure aggregation privacy federated learning"
 
+[search.concepts]
+federated = ["federated learning", "federated averaging"]
+security  = ["secure aggregation", "model poisoning", "byzantine robust"]
+privacy   = ["differential privacy", "privacy preserving"]
+
+[filter.concepts]
+federated = ["federated learning", "federated averaging"]
+security  = ["secure aggregation", "model poisoning", "byzantine"]
+privacy   = ["differential privacy", "privacy preserving"]
+
 [filter.keyword]
-include = ["federated", "secure"]
 exclude = ["survey", "review", "tutorial"]
 
 [filter.llm]
