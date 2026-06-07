@@ -102,6 +102,7 @@ class LLMConfig(msgspec.Struct, kw_only=True):
 class FilterConfig(msgspec.Struct, kw_only=True):
     """Filtering configuration."""
 
+    concepts: dict[str, list[str]] | None = None
     keyword: KeywordConfig = msgspec.field(default_factory=KeywordConfig)
     llm: LLMConfig = msgspec.field(default_factory=LLMConfig)
 
@@ -112,6 +113,20 @@ class SurveyConfig(msgspec.Struct, kw_only=True):
     project: ProjectConfig
     search: SearchConfig
     filter: FilterConfig = msgspec.field(default_factory=FilterConfig)
+
+
+def _validate_concepts(concepts: dict[str, list[str]] | None, where: str) -> None:
+    """Reject empty synonym lists or blank synonyms, naming the location."""
+    if concepts is None:
+        return
+    for key, synonyms in concepts.items():
+        if not synonyms:
+            raise ValueError(
+                f"Concept {key!r} in {where} must have at least one synonym."
+            )
+        for syn in synonyms:
+            if not syn.strip():
+                raise ValueError(f"Concept {key!r} in {where} has an empty synonym.")
 
 
 def load_config(path: str | Path) -> SurveyConfig:
@@ -125,13 +140,13 @@ def load_config(path: str | Path) -> SurveyConfig:
     unknown = set(cfg.search.sources) - VALID_SOURCES
     if unknown:
         raise ValueError(f"Unknown source(s): {', '.join(sorted(unknown))}")
-    if cfg.search.concepts is not None:
-        for key, synonyms in cfg.search.concepts.items():
-            if not synonyms:
-                raise ValueError(f"Concept {key!r} must have at least one synonym.")
-            for syn in synonyms:
-                if not syn.strip():
-                    raise ValueError(f"Concept {key!r} has an empty synonym.")
+    _validate_concepts(cfg.search.concepts, "search.concepts")
+    _validate_concepts(cfg.filter.concepts, "filter.concepts")
+    if cfg.filter.concepts and cfg.filter.keyword.include:
+        log.warning(
+            "filter.include_ignored",
+            reason="filter.concepts is active; filter.keyword.include is ignored",
+        )
     if cfg.project.export_format not in VALID_EXPORT_FORMATS:
         raise ValueError(
             f"Unknown export format: {cfg.project.export_format!r}. "
