@@ -70,6 +70,23 @@ explicit one is dropped). Each gets a traceable label such as
 logs a warning, since every query hits every source. See `examples/survey.toml`
 for a complete example.
 
+### Concept filtering
+
+Mirror the search concepts on the filtering side with `[filter.concepts]`. When
+present, a record is kept only if it matches at least one synonym from **every**
+concept block (AND across concepts, OR within) and contains no `exclude` term —
+the flat `filter.keyword.include` list is ignored while concepts are active.
+
+```toml
+[filter.concepts]
+federated = ["federated learning", "federated averaging"]
+security  = ["secure aggregation", "model poisoning", "byzantine"]
+privacy   = ["differential privacy", "privacy preserving"]
+```
+
+This is independent from `[search.concepts]`, so you can search broadly but keep
+only records that genuinely cover all concepts.
+
 ### LLM scoring provider
 
 LLM relevance scoring runs through `filter.llm`. Two providers are supported:
