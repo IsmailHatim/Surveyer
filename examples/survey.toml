@@ -1,6 +1,7 @@
 [project]
 name = "secure-aggregation-survey"
 output_dir = "runs/secure-aggregation"
+export_format = "xlsx" # or "csv"
 
 [search]
 year_min = 2018
