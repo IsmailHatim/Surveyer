@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import polars as pl
 from openpyxl import load_workbook
 
-from surveyer.export import export_xlsx
+from surveyer.export import export_csv, export_results, export_xlsx
 from surveyer.models import Ledger, Record, SourceCount
 
 
@@ -32,3 +33,55 @@ def test_export_handles_empty_inputs(tmp_path):
     wb = load_workbook(out)
     assert set(wb.sheetnames) == {"papers", "excluded", "summary"}
     assert wb["papers"]["A1"].value == "title"
+
+
+def test_export_csv_writes_three_files(tmp_path):
+    kept = [Record(title="Kept paper", doi="10.1/a", sources=["dblp"], llm_score=0.8)]
+    excluded = [Record(title="Dropped paper", sources=["openalex"])]
+    ledger = Ledger(identified=[SourceCount(source="dblp", count=1)], included=1)
+
+    export_csv(kept, excluded, ledger, tmp_path)
+
+    papers = pl.read_csv(tmp_path / "papers.csv")
+    excluded_df = pl.read_csv(tmp_path / "excluded.csv")
+    summary = pl.read_csv(tmp_path / "summary.csv")
+    assert papers["title"].to_list() == ["Kept paper"]
+    assert papers["llm_score"].to_list() == [0.8]
+    assert excluded_df["title"].to_list() == ["Dropped paper"]
+    assert summary.columns == ["stage", "count"]
+
+
+def test_export_csv_handles_empty_inputs(tmp_path):
+    export_csv([], [], Ledger(), tmp_path)
+
+    papers = pl.read_csv(tmp_path / "papers.csv")
+    assert papers.columns[0] == "title"
+    assert papers.height == 0
+
+
+def test_export_results_dispatches_xlsx(tmp_path):
+    kept = [Record(title="Kept paper", sources=["dblp"], llm_score=0.8)]
+    export_results(kept, [], Ledger(included=1), tmp_path, fmt="xlsx")
+
+    assert (tmp_path / "survey.xlsx").exists()
+    wb = load_workbook(tmp_path / "survey.xlsx")
+    assert set(wb.sheetnames) == {"papers", "excluded", "summary"}
+
+
+def test_export_results_dispatches_csv(tmp_path):
+    kept = [Record(title="Kept paper", sources=["dblp"], llm_score=0.8)]
+    export_results(kept, [], Ledger(included=1), tmp_path, fmt="csv")
+
+    assert not (tmp_path / "survey.xlsx").exists()
+    assert {p.name for p in tmp_path.glob("*.csv")} == {
+        "papers.csv",
+        "excluded.csv",
+        "summary.csv",
+    }
+
+
+def test_export_results_rejects_unknown_format(tmp_path):
+    import pytest
+
+    with pytest.raises(ValueError, match="Unknown export format"):
+        export_results([], [], Ledger(), tmp_path, fmt="json")

@@ -17,12 +17,15 @@ VALID_SOURCES = {
 
 VALID_LLM_PROVIDERS = {"openai", "ollama"}
 
+VALID_EXPORT_FORMATS = {"xlsx", "csv"}
+
 
 class ProjectConfig(msgspec.Struct, kw_only=True):
     """Project configuration."""
 
     name: str
     output_dir: str = "runs/default"
+    export_format: str = "xlsx"
 
 
 class Query(msgspec.Struct, kw_only=True):
@@ -86,6 +89,11 @@ def load_config(path: str | Path) -> SurveyConfig:
     unknown = set(cfg.search.sources) - VALID_SOURCES
     if unknown:
         raise ValueError(f"Unknown source(s): {', '.join(sorted(unknown))}")
+    if cfg.project.export_format not in VALID_EXPORT_FORMATS:
+        raise ValueError(
+            f"Unknown export format: {cfg.project.export_format!r}. "
+            f"Valid formats: {', '.join(sorted(VALID_EXPORT_FORMATS))}"
+        )
     if cfg.filter.llm.provider not in VALID_LLM_PROVIDERS:
         raise ValueError(
             f"Unknown LLM provider: {cfg.filter.llm.provider!r}. "
