@@ -32,12 +32,6 @@ def apply_keyword_filter(
     cfg: KeywordConfig,
     concepts: dict[str, list[str]] | None = None,
 ) -> tuple[list[Record], int]:
-    """Return (kept records, number excluded).
-
-    When ``concepts`` is given, a record is kept only if it contains no
-    ``exclude`` term and matches at least one synonym from every concept block
-    (the flat ``include`` list is ignored). When ``concepts`` is ``None`` or an
-    empty dict, the ``include`` OR-any rule applies as before.
-    """
+    """Return (kept records, number excluded)."""
     kept = [r for r in records if _matches(r, cfg, concepts)]
     return kept, len(records) - len(kept)
