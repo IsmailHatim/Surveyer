@@ -64,10 +64,11 @@ def fetch_all(
     records: list[Record] = []
     counts: dict[str, int] = {}
     failed: list[str] = []
+    queries = search.resolved_queries()
     for name, source in registry.items():
         n = 0
         had_error = False
-        for query in search.queries:
+        for query in queries:
             try:
                 hits = source.search(
                     query.terms, max_results=search.max_results_per_query

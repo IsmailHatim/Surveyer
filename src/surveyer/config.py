@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import itertools
 import tomllib
 from pathlib import Path
 
 import msgspec
+import structlog
+
+log = structlog.get_logger()
+
+CONCEPT_QUERY_WARN_THRESHOLD = 100
 
 VALID_SOURCES = {
     "dblp",
@@ -35,14 +41,44 @@ class Query(msgspec.Struct, kw_only=True):
     terms: str
 
 
+def expand_concepts(concepts: dict[str, list[str]] | None) -> list[Query]:
+    """Expand concept OR into the AND cross-product of queries."""
+    if not concepts:
+        return []
+    keys = list(concepts.keys())
+    value_lists = [concepts[k] for k in keys]
+    queries: list[Query] = []
+    for combo in itertools.product(*(enumerate(v) for v in value_lists)):
+        terms = " ".join(syn for _, syn in combo)
+        label = "concept_" + "__".join(
+            f"{key}{idx}" for key, (idx, _) in zip(keys, combo)
+        )
+        queries.append(Query(label=label, terms=terms))
+    return queries
+
+
 class SearchConfig(msgspec.Struct, kw_only=True):
     """Search configuration."""
 
     sources: list[str]
     queries: list[Query]
+    concepts: dict[str, list[str]] | None = None
     year_min: int | None = None
     year_max: int | None = None
     max_results_per_query: int = 200
+
+    def resolved_queries(self) -> list[Query]:
+        """Explicit queries plus the concept cross-product."""
+        generated = expand_concepts(self.concepts)
+        if len(generated) > CONCEPT_QUERY_WARN_THRESHOLD:
+            log.warning(
+                "concepts.explosion",
+                generated=len(generated),
+                threshold=CONCEPT_QUERY_WARN_THRESHOLD,
+            )
+        explicit_terms = {q.terms for q in self.queries}
+        deduped = [q for q in generated if q.terms not in explicit_terms]
+        return list(self.queries) + deduped
 
 
 class KeywordConfig(msgspec.Struct, kw_only=True):
@@ -89,6 +125,13 @@ def load_config(path: str | Path) -> SurveyConfig:
     unknown = set(cfg.search.sources) - VALID_SOURCES
     if unknown:
         raise ValueError(f"Unknown source(s): {', '.join(sorted(unknown))}")
+    if cfg.search.concepts is not None:
+        for key, synonyms in cfg.search.concepts.items():
+            if not synonyms:
+                raise ValueError(f"Concept {key!r} must have at least one synonym.")
+            for syn in synonyms:
+                if not syn.strip():
+                    raise ValueError(f"Concept {key!r} has an empty synonym.")
     if cfg.project.export_format not in VALID_EXPORT_FORMATS:
         raise ValueError(
             f"Unknown export format: {cfg.project.export_format!r}. "
