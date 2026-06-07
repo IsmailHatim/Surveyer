@@ -25,6 +25,28 @@ _COLUMNS = [
     "llm_reason",
 ]
 
+# Bold, shaded header row applied to every sheet.
+_HEADER_FORMAT = {
+    "bold": True,
+    "bg_color": "#D9E1F2",
+    "border": 1,
+    "align": "center",
+    "valign": "vcenter",
+}
+
+# Yellow (low) to green (high) colour scale over the 0..1 llm_score.
+_SCORE_COLOR_SCALE = {
+    "llm_score": {
+        "type": "2_color_scale",
+        "min_type": "num",
+        "min_value": 0.0,
+        "min_color": "#FFEB84",
+        "max_type": "num",
+        "max_value": 1.0,
+        "max_color": "#63BE7B",
+    }
+}
+
 
 def _to_frame(records: list[Record]) -> pl.DataFrame:
     rows = []
@@ -85,8 +107,64 @@ def export_xlsx(
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = xlsxwriter.Workbook(str(path))
     try:
-        _to_frame(kept).write_excel(workbook=wb, worksheet="papers")
-        _to_frame(excluded).write_excel(workbook=wb, worksheet="excluded")
-        _summary_frame(ledger).write_excel(workbook=wb, worksheet="summary")
+        _to_frame(kept).write_excel(
+            workbook=wb,
+            worksheet="papers",
+            header_format=_HEADER_FORMAT,
+            conditional_formats=_SCORE_COLOR_SCALE,
+            autofit=True,
+            freeze_panes=(1, 0),
+        )
+        _to_frame(excluded).write_excel(
+            workbook=wb,
+            worksheet="excluded",
+            header_format=_HEADER_FORMAT,
+            conditional_formats=_SCORE_COLOR_SCALE,
+            autofit=True,
+            freeze_panes=(1, 0),
+        )
+        _summary_frame(ledger).write_excel(
+            workbook=wb,
+            worksheet="summary",
+            header_format=_HEADER_FORMAT,
+            autofit=True,
+            freeze_panes=(1, 0),
+        )
     finally:
         wb.close()
+
+
+def export_csv(
+    kept: list[Record],
+    excluded: list[Record],
+    ledger: Ledger,
+    out_dir: str | Path,
+) -> None:
+    """Write kept and excluded records and a ledger summary as CSV files.
+
+    Unlike the .xlsx export, CSV has no concept of sheets or cell styling,
+    so each sheet is written to its own file in ``out_dir``: ``papers.csv``,
+    ``excluded.csv`` and ``summary.csv``.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _to_frame(kept).write_csv(out_dir / "papers.csv")
+    _to_frame(excluded).write_csv(out_dir / "excluded.csv")
+    _summary_frame(ledger).write_csv(out_dir / "summary.csv")
+
+
+def export_results(
+    kept: list[Record],
+    excluded: list[Record],
+    ledger: Ledger,
+    out_dir: str | Path,
+    fmt: str = "xlsx",
+) -> None:
+    """Export results to ``out_dir`` in the requested format ("xlsx" or "csv")."""
+    out_dir = Path(out_dir)
+    if fmt == "csv":
+        export_csv(kept, excluded, ledger, out_dir)
+    elif fmt == "xlsx":
+        export_xlsx(kept, excluded, ledger, out_dir / "survey.xlsx")
+    else:
+        raise ValueError(f"Unknown export format: {fmt!r}")
