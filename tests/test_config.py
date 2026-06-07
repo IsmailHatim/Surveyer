@@ -160,6 +160,76 @@ def test_concept_with_blank_synonym_rejected(tmp_path):
     assert "missingness" in str(excinfo.value)
 
 
+FILTER_CONCEPTS_SAMPLE = """
+[project]
+name = "demo"
+output_dir = "runs/demo"
+
+[search]
+sources = ["dblp"]
+
+[[search.queries]]
+label = "manual"
+terms = "hand written query"
+
+[filter.concepts]
+graph = ["graph neural network", "GNN"]
+missingness = ["missing", "incomplete"]
+"""
+
+
+def test_load_config_with_filter_concepts(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(FILTER_CONCEPTS_SAMPLE)
+    cfg = load_config(p)
+    assert cfg.filter.concepts == {
+        "graph": ["graph neural network", "GNN"],
+        "missingness": ["missing", "incomplete"],
+    }
+
+
+def test_filter_concepts_default_none(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(SAMPLE)
+    cfg = load_config(p)
+    assert cfg.filter.concepts is None
+
+
+def test_filter_concept_empty_list_rejected(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(FILTER_CONCEPTS_SAMPLE.replace('graph = ["graph neural network", "GNN"]', "graph = []"))
+    with pytest.raises(ValueError, match="must have at least one synonym") as excinfo:
+        load_config(p)
+    assert "graph" in str(excinfo.value)
+    assert "filter.concepts" in str(excinfo.value)
+
+
+def test_filter_concept_blank_synonym_rejected(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(FILTER_CONCEPTS_SAMPLE.replace('"missing", "incomplete"', '"missing", "  "'))
+    with pytest.raises(ValueError, match="has an empty synonym") as excinfo:
+        load_config(p)
+    assert "missingness" in str(excinfo.value)
+    assert "filter.concepts" in str(excinfo.value)
+
+
+def test_warns_when_filter_concepts_and_include_both_set(tmp_path):
+    src = FILTER_CONCEPTS_SAMPLE + '\n[filter.keyword]\ninclude = ["graph"]\n'
+    p = tmp_path / "survey.toml"
+    p.write_text(src)
+    with structlog.testing.capture_logs() as logs:
+        load_config(p)
+    assert [e for e in logs if e["event"] == "filter.include_ignored"]
+
+
+def test_no_include_ignored_warning_without_concepts(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(SAMPLE)  # has include but no filter.concepts
+    with structlog.testing.capture_logs() as logs:
+        load_config(p)
+    assert [e for e in logs if e["event"] == "filter.include_ignored"] == []
+
+
 def test_expand_concepts_none_returns_empty():
     assert expand_concepts(None) == []
 
