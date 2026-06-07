@@ -46,7 +46,7 @@ def fetch(config: str = typer.Option(..., "--config", "-c")) -> None:
     result = run_pipeline(cfg)
     typer.echo(
         f"Fetched and deduplicated: {result.ledger.after_dedup()} records "
-        f"in {cfg.project.output_dir}/survey.xlsx"
+        f"in {cfg.project.output_dir}/"
     )
 
 

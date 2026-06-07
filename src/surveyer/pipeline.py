@@ -9,7 +9,7 @@ import structlog
 
 from surveyer.config import SurveyConfig
 from surveyer.dedup import deduplicate
-from surveyer.export import export_xlsx
+from surveyer.export import export_results
 from surveyer.filtering.keyword import apply_keyword_filter
 from surveyer.filtering.llm import Scorer, apply_llm_filter, build_scorer
 from surveyer.ledger import save_ledger
@@ -80,7 +80,7 @@ def run_pipeline(
 
     # 5. Persist outputs
     save_ledger(ledger, out_dir / "ledger.json")
-    export_xlsx(after_llm, dropped, ledger, out_dir / "survey.xlsx")
+    export_results(after_llm, dropped, ledger, out_dir, fmt=cfg.project.export_format)
     render_prisma(ledger, out_dir / "prisma.png")
 
     return PipelineResult(ledger=ledger, kept=after_llm, excluded=dropped)
