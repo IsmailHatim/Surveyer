@@ -49,6 +49,27 @@ Or keep them in the `.env` file and load it automatically:
 uv run --env-file .env surveyer run --config examples/survey.toml
 ```
 
+### Concept-group expansion
+
+Rather than hand-writing every keyword combination as a separate
+`[[search.queries]]`, you can declare concept blocks of synonyms. Synonyms
+within a concept are OR alternatives; the concepts are combined with AND. The
+tool expands the cross-product into queries automatically:
+
+```toml
+[search.concepts]
+federated = ["federated learning", "federated averaging"]
+security  = ["secure aggregation", "model poisoning", "byzantine robust"]
+privacy   = ["differential privacy", "privacy preserving"]
+```
+
+The block above generates 2 × 3 × 2 = 12 queries. Generated queries are added to
+any explicit `[[search.queries]]` (a generated query whose terms exactly match an
+explicit one is dropped). Each gets a traceable label such as
+`concept_federated0__security0__privacy0`. Above 100 generated queries the tool
+logs a warning, since every query hits every source. See `examples/survey.toml`
+for a complete example.
+
 ### LLM scoring provider
 
 LLM relevance scoring runs through `filter.llm`. Two providers are supported:
