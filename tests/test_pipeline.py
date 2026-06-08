@@ -53,7 +53,7 @@ def test_run_pipeline_end_to_end(tmp_path):
     assert result.ledger.excluded_keyword == 1
     assert result.ledger.included == 1
     assert (tmp_path / "survey.xlsx").exists()
-    assert (tmp_path / "prisma.png").exists()
+    assert (tmp_path / "prisma.mmd").exists()  # always written
     led = load_ledger(tmp_path / "ledger.json")
     assert led.included == 1
     assert result.ledger.excluded_llm == 0

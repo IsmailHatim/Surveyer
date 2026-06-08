@@ -66,8 +66,13 @@ def prisma(config: str = typer.Option(..., "--config", "-c")) -> None:
             err=True,
         )
         raise typer.Exit(1) from None
-    render_prisma(ledger, out / "prisma.png")
-    typer.echo(f"PRISMA written to {out / 'prisma.png'}")
+    render_prisma(
+        ledger,
+        cfg.search,
+        out,
+        llm_model=cfg.filter.llm.model if cfg.filter.llm.enabled else None,
+    )
+    typer.echo(f"PRISMA written to {out}/prisma.{{svg,pdf,png,mmd}}")
 
 
 if __name__ == "__main__":

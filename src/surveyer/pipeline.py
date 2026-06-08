@@ -54,10 +54,11 @@ def run_pipeline(
     ledger.duplicates_removed = removed
 
     # 3. Keyword filter
-    after_kw, excluded_kw = apply_keyword_filter(
+    after_kw, excluded_kw, kw_reasons = apply_keyword_filter(
         deduped, cfg.filter.keyword, concepts=cfg.filter.concepts
     )
     ledger.excluded_keyword = excluded_kw
+    ledger.excluded_keyword_reasons = kw_reasons
     kept_kw_ids = {id(r) for r in after_kw}
     dropped: list[Record] = [r for r in deduped if id(r) not in kept_kw_ids]
 
@@ -83,6 +84,11 @@ def run_pipeline(
     # 5. Persist outputs
     save_ledger(ledger, out_dir / "ledger.json")
     export_results(after_llm, dropped, ledger, out_dir, fmt=cfg.project.export_format)
-    render_prisma(ledger, out_dir / "prisma.png")
+    render_prisma(
+        ledger,
+        cfg.search,
+        out_dir,
+        llm_model=cfg.filter.llm.model if cfg.filter.llm.enabled else None,
+    )
 
     return PipelineResult(ledger=ledger, kept=after_llm, excluded=dropped)
