@@ -11,27 +11,36 @@ def _haystack(r: Record) -> str:
     return " ".join(parts).lower()
 
 
-def _matches(
+def _exclusion_reason(
     record: Record, cfg: KeywordConfig, concepts: dict[str, list[str]] | None
-) -> bool:
+) -> str | None:
+    """Return the primary reason a record is excluded, or None if it is kept."""
     text = _haystack(record)
-    if any(term.lower() in text for term in cfg.exclude):
-        return False
+    for term in cfg.exclude:
+        if term.lower() in text:
+            return f"contains '{term}'"
     if concepts:
-        return all(
-            any(syn.lower() in text for syn in synonyms)
-            for synonyms in concepts.values()
-        )
+        for concept, synonyms in concepts.items():
+            if not any(syn.lower() in text for syn in synonyms):
+                return f"no {concept}"
+        return None
     if cfg.include and not any(term.lower() in text for term in cfg.include):
-        return False
-    return True
+        return "no included keyword"
+    return None
 
 
 def apply_keyword_filter(
     records: list[Record],
     cfg: KeywordConfig,
     concepts: dict[str, list[str]] | None = None,
-) -> tuple[list[Record], int]:
-    """Return (kept records, number excluded)."""
-    kept = [r for r in records if _matches(r, cfg, concepts)]
-    return kept, len(records) - len(kept)
+) -> tuple[list[Record], int, dict[str, int]]:
+    """Return (kept records, number excluded, per-reason exclusion counts)."""
+    kept: list[Record] = []
+    reasons: dict[str, int] = {}
+    for record in records:
+        reason = _exclusion_reason(record, cfg, concepts)
+        if reason is None:
+            kept.append(record)
+        else:
+            reasons[reason] = reasons.get(reason, 0) + 1
+    return kept, len(records) - len(kept), reasons
