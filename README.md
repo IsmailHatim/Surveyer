@@ -100,7 +100,7 @@ LLM relevance scoring runs through `filter.llm`. Two providers are supported:
 ## Run
 
 ```bash
-# Full run will create : runs/<name>/survey.xlsx, ledger.json, prisma.png
+# Full run will create : runs/<name>/survey.xlsx, ledger.json, prisma.{svg,pdf,png,mmd}
 uv run surveyer run --config examples/survey.toml
 
 # Fetch and deduplicate only
@@ -124,7 +124,27 @@ uv run surveyer prisma --config examples/survey.toml
 
 - `survey.xlsx` - `papers`, `excluded`, and `summary` sheets.
 - `ledger.json` - per-stage counts (the input to PRISMA).
-- `prisma.png` - PRISMA flow diagram.
+
+### PRISMA flow diagram
+
+The pipeline writes a PRISMA flow diagram to the run's output directory:
+
+| File | Description |
+|------|-------------|
+| `prisma.svg` / `prisma.pdf` / `prisma.png` | Publication figure (requires Graphviz) |
+| `prisma.mmd` | Mermaid source rendered natively by GitHub and most IDEs |
+
+The image outputs require the Graphviz binary:
+
+```bash
+# macOS
+brew install graphviz
+# Debian/Ubuntu
+apt-get install graphviz
+```
+
+If the binray is not installed the run still creates: `prisma.mmd` and `prisma.dot`
+(the raw diagram source) are written and a warning is logged.
 
 ## License
 
