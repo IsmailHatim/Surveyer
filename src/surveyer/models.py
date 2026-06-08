@@ -36,6 +36,7 @@ class Ledger(msgspec.Struct, kw_only=True):
     identified: list[SourceCount] = []
     duplicates_removed: int = 0
     excluded_keyword: int = 0
+    excluded_keyword_reasons: dict[str, int] = {}
     excluded_llm: int = 0
     included: int = 0
     failed_sources: list[str] = []
