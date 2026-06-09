@@ -13,6 +13,9 @@
   <a href="https://github.com/IsmailHatim/Surveyer/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/IsmailHatim/Surveyer?logo=github&color=yellow"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/IsmailHatim/Surveyer?color=orange"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/IsmailHatim/Surveyer?color=teal"></a>
+  <a href="https://github.com/IsmailHatim/Surveyer/actions/workflows/ci.yml"><img alt="CI"
+    src="https://img.shields.io/github/actions/workflow/status/IsmailHatim/Surveyer/ci.yml?branch=main&logo=githubact
+    ions&logoColor=white&label=CI"></a>
 </p>
 
 Surveyer is an open source Literature search tool for academic surveys: fetch from
