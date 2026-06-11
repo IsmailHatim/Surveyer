@@ -27,6 +27,11 @@ def run(
         f"included {result.ledger.included}. "
         f"Outputs in {cfg.project.output_dir}/"
     )
+    n_local = sum(1 for r in result.kept if r.bibtex_source == "local")
+    typer.echo(
+        f"references.bib written ({len(result.kept)} entries,"
+        f" {n_local} local fallbacks)."
+    )
     if result.ledger.failed_sources:
         typer.echo(
             "Warning: these sources errored on one or more queries: "
@@ -43,7 +48,7 @@ def fetch(config: str = typer.Option(..., "--config", "-c")) -> None:
     cfg.filter.keyword.include = []
     cfg.filter.keyword.exclude = []
     cfg.filter.llm.enabled = False
-    result = run_pipeline(cfg)
+    result = run_pipeline(cfg, resolve_bibtex=False)
     typer.echo(
         f"Fetched and deduplicated: {result.ledger.after_dedup()} records "
         f"in {cfg.project.output_dir}/"

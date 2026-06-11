@@ -33,8 +33,10 @@ def run_pipeline(
     *,
     registry: dict | None = None,
     scorer: Scorer | None = None,
+    resolver: object | None = None,
+    resolve_bibtex: bool = True,
 ) -> PipelineResult:
-    """Run the full pipeline: fetch -> dedup -> filter -> export -> prisma."""
+    """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma."""
     out_dir = Path(cfg.project.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_root = out_dir / "cache"
@@ -80,6 +82,14 @@ def run_pipeline(
     dropped.extend(r for r in after_kw if id(r) not in kept_llm_ids)
 
     ledger.included = len(after_llm)
+
+    # 4bis Resolve BibTeX for kept records (DBLP key -> DOI -> local fallback).
+    if resolve_bibtex:
+        if resolver is None:
+            from surveyer.bibtex import build_resolver
+
+            resolver = build_resolver(cache_root)
+        resolver.resolve_all(after_llm)
 
     # 5. Persist outputs
     save_ledger(ledger, out_dir / "ledger.json")

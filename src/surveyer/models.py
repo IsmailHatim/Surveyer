@@ -21,6 +21,9 @@ class Record(msgspec.Struct, kw_only=True):
     query_labels: list[str] = []
     llm_score: float | None = None
     llm_reason: str | None = None
+    dblp_key: str | None = None
+    bibtex: str | None = None
+    bibtex_source: str | None = None
 
 
 class SourceCount(msgspec.Struct, kw_only=True):
