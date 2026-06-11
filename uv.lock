@@ -2386,6 +2386,7 @@ dependencies = [
     { name = "msgspec", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "numpy", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "openai", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "openpyxl", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pandas", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "polars", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "rapidfuzz", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -2405,7 +2406,6 @@ scholar = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "openpyxl", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest-mock", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "ruff", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -2421,6 +2421,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "ollama", marker = "extra == 'ollama'", specifier = ">=0.3" },
     { name = "openai", specifier = ">=1.40" },
+    { name = "openpyxl", specifier = ">=3.1" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "polars", specifier = ">=1.0" },
     { name = "rapidfuzz", specifier = ">=3.9" },
@@ -2434,7 +2435,6 @@ provides-extras = ["scholar", "ollama"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "openpyxl", specifier = ">=3.1" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-mock", specifier = ">=3.14" },
     { name = "ruff", specifier = ">=0.15.16" },
