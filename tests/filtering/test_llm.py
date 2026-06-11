@@ -33,6 +33,15 @@ def test_apply_llm_filter_threshold():
     assert kept[0].llm_reason == "reason"
 
 
+def test_apply_llm_filter_sets_exclusion_reason():
+    cfg = LLMConfig(enabled=True, threshold=0.5, survey_abstract="my survey")
+    good = Record(title="Good", abstract="this is relevant work")
+    bad = Record(title="Bad", abstract="off topic")
+    apply_llm_filter([good, bad], cfg, FakeScorer())
+    assert good.exclusion_reason is None
+    assert bad.exclusion_reason == "llm score 0.10 < threshold 0.5"
+
+
 def test_apply_llm_filter_logs_progress():
     import structlog
 

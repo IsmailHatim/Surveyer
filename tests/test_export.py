@@ -111,6 +111,18 @@ def test_to_frame_includes_bibtex_columns():
     assert df["bibtex_source"][0] == "local"
 
 
+def test_export_includes_exclusion_reason_column(tmp_path):
+    excluded = [Record(title="Dropped paper", exclusion_reason="no graph")]
+    out = tmp_path / "survey.xlsx"
+    export_xlsx([], excluded, Ledger(), out)
+
+    ws = load_workbook(out)["excluded"]
+    header = [c.value for c in ws[1]]
+    assert "exclusion_reason" in header
+    col = header.index("exclusion_reason") + 1
+    assert ws.cell(row=2, column=col).value == "no graph"
+
+
 def test_export_bibtex_writes_references_file(tmp_path):
     kept = [
         Record(title="A", bibtex="@article{a, title={A}}"),

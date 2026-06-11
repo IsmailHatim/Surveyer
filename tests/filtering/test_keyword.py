@@ -72,6 +72,26 @@ def test_concepts_ignore_include_list():
     assert reasons == {}
 
 
+def test_excluded_records_carry_exclusion_reason():
+    concepts = {
+        "graph": ["graph", "gnn"],
+        "missingness": ["missing", "incomplete"],
+    }
+    cfg = KeywordConfig(include=[], exclude=["survey"])
+    kept_rec = Record(title="A GNN for missing data", abstract="")
+    no_graph = Record(
+        title="Multimodal Patient Representation Learning with Missing Modalities",
+        abstract=None,
+    )
+    has_excluded_term = Record(title="A GNN survey on missing data", abstract="")
+    recs = [kept_rec, no_graph, has_excluded_term]
+    kept, excluded, reasons = apply_keyword_filter(recs, cfg, concepts=concepts)
+    assert kept == [kept_rec]
+    assert kept_rec.exclusion_reason is None
+    assert no_graph.exclusion_reason == "no graph"
+    assert has_excluded_term.exclusion_reason == "contains 'survey'"
+
+
 def test_no_concepts_uses_include_path():
     cfg = KeywordConfig(include=["security"], exclude=[])
     recs = [
