@@ -28,11 +28,13 @@ dependencies = [
 [project.optional-dependencies]
 scholar = ["scholarly>=1.7"]
 ollama = ["ollama>=0.3"]
+tui = ["textual>=1.0", "tomlkit>=0.13"]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.14",
+    "pytest-asyncio>=0.24",
     "ruff>=0.15.16",
 ]
 
@@ -60,10 +62,16 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "D"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/surveyer/tui/logo.py" = ["E501"] # ASCII-art lines exceed the line length
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = ["surveyer"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.ty.rules]
