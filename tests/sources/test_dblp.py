@@ -2,7 +2,54 @@ from __future__ import annotations
 
 import json
 
-from surveyer.sources.dblp import parse_dblp
+import httpx
+
+from surveyer.sources.base import HttpClient
+from surveyer.sources.dblp import DblpSource, parse_dblp
+
+_HIT = {
+    "result": {"hits": {"hit": [{"info": {"title": "Mirror paper", "year": "2024"}}]}}
+}
+
+
+def test_dblp_search_falls_back_to_mirror_and_sticks(tmp_path):
+    # dblp.org rate-limits by IP and starts dropping connections
+    calls = {"primary": 0, "mirror": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "dblp.org":
+            calls["primary"] += 1
+            raise httpx.ConnectError("reset", request=request)
+        calls["mirror"] += 1
+        return httpx.Response(200, json=_HIT)
+
+    client = HttpClient(
+        cache_dir=tmp_path,
+        transport=httpx.MockTransport(handler),
+        max_retries=2,
+        backoff=0.0,
+    )
+    source = DblpSource(client)
+
+    first = source.search("q1", max_results=10)
+    assert [r.title for r in first] == ["Mirror paper"]
+    assert calls["primary"] == 2  # retries exhausted once, then switched
+
+    source.search("q2", max_results=10)
+    assert calls["primary"] == 2  # sticky: second query goes straight to mirror
+    assert calls["mirror"] == 2
+
+
+def test_dblp_search_uses_primary_when_healthy(tmp_path):
+    hosts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return httpx.Response(200, json=_HIT)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    DblpSource(client).search("q", max_results=10)
+    assert hosts == ["dblp.org"]
 
 
 def test_parse_dblp_captures_key():

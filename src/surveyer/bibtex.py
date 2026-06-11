@@ -15,6 +15,8 @@ from surveyer.sources.base import HttpClient
 log = structlog.get_logger()
 
 DBLP_REC = "https://dblp.org/rec/{key}.bib"
+# Official mirror with identical content, used when dblp.org rate-limits us.
+DBLP_REC_MIRROR = "https://dblp.uni-trier.de/rec/{key}.bib"
 DOI_BASE = "https://doi.org/{doi}"
 _BIBTEX_ACCEPT = {"Accept": "application/x-bibtex"}
 # DBLP rate limits
@@ -67,6 +69,7 @@ class BibtexResolver:
         """Initialise with an HTTP client used for both DBLP and DOI fetches."""
         self.client = client
         self._seen: set[str] = set()
+        self._dblp_rec = DBLP_REC
 
     def _fetch(self, url: str, headers: dict | None = None) -> str | None:
         try:
@@ -76,10 +79,23 @@ class BibtexResolver:
             return None
         return text.strip() if text else None
 
+    def _fetch_dblp(self, key: str) -> str | None:
+        """Fetch a DBLP .bib entry, falling back to the Trier mirror."""
+        try:
+            text = self.client.get_text(self._dblp_rec.format(key=key))
+        except httpx.HTTPError as exc:
+            if self._dblp_rec == DBLP_REC_MIRROR:
+                log.warning("bibtex.dblp_mirror_failed", key=key, error=str(exc))
+                return None
+            log.warning("bibtex.dblp_primary_failed", fallback=DBLP_REC_MIRROR)
+            self._dblp_rec = DBLP_REC_MIRROR  # sticky
+            return self._fetch_dblp(key)
+        return text.strip() if text else None
+
     def resolve(self, record: Record) -> tuple[str, str]:
         """Return ``(bibtex_text, source)`` where source is dblp/doi/local."""
         if record.dblp_key:
-            text = self._fetch(DBLP_REC.format(key=record.dblp_key))
+            text = self._fetch_dblp(record.dblp_key)
             if text:
                 return text, "dblp"
         if record.doi:

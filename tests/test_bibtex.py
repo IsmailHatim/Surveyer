@@ -75,6 +75,49 @@ def test_resolve_chains_through_failures(tmp_path):
     assert text.startswith("@misc{doe2024survey,")
 
 
+def test_resolve_dblp_falls_back_to_mirror_and_sticks(tmp_path):
+    calls = {"primary": 0, "mirror": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "dblp.org":
+            calls["primary"] += 1
+            raise httpx.ConnectError("reset", request=request)
+        calls["mirror"] += 1
+        return httpx.Response(200, text="@article{DBLP:k, title={From mirror}}")
+
+    client = HttpClient(
+        cache_dir=tmp_path,
+        transport=httpx.MockTransport(handler),
+        max_retries=2,
+        backoff=0.0,
+    )
+    resolver = BibtexResolver(client)
+
+    text, source = resolver.resolve(Record(title="X", dblp_key="journals/k1"))
+    assert source == "dblp"
+    assert "From mirror" in text
+    assert calls["primary"] == 2  # retries exhausted once, then switched
+
+    resolver.resolve(Record(title="Y", dblp_key="journals/k2"))
+    assert calls["primary"] == 2  # sticky: second record skips dblp.org
+    assert calls["mirror"] == 2
+
+
+def test_resolve_dblp_404_is_authoritative_no_mirror(tmp_path):
+    # A 404 means the record has no entry
+    hosts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return httpx.Response(404)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    r = Record(title="Survey", authors=["Jane Doe"], year=2024, dblp_key="journals/k")
+    _, source = BibtexResolver(client).resolve(r)
+    assert source == "local"
+    assert hosts == ["dblp.org"]  # mirror never tried
+
+
 def test_resolve_follows_doi_redirect(tmp_path):
     # doi.org answers content negotiation with a 302 to api.crossref.org;
     # the resolver's client must follow it instead of treating it as an error.

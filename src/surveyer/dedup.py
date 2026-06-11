@@ -11,6 +11,14 @@ from surveyer.models import Record
 _PUNCT = re.compile(r"[^\w\s]")
 _SPACE = re.compile(r"\s+")
 
+# DOI prefixes of preprint/deposit registrars (arXiv, Zenodo).
+_WEAK_DOI_PREFIXES = ("10.48550/", "10.5281/")
+
+
+def _is_weak_doi(doi: str | None) -> bool:
+    """True for preprint/deposit registrar DOIs (arXiv, Zenodo)."""
+    return bool(doi) and doi.lower().startswith(_WEAK_DOI_PREFIXES)
+
 
 def normalize_title(title: str) -> str:
     """Lowercase and strip punctuation and whitespace from a title."""
@@ -21,6 +29,9 @@ def normalize_title(title: str) -> str:
 def _merge(into: Record, other: Record) -> None:
     into.sources = sorted(set(into.sources) | set(other.sources))
     into.query_labels = sorted(set(into.query_labels) | set(other.query_labels))
+    # Prefer the publisher DOI over a preprint registrar.
+    if other.doi and _is_weak_doi(into.doi) and not _is_weak_doi(other.doi):
+        into.doi = other.doi
     # Backfill missing scalar fields from the duplicate.
     for field in ("doi", "abstract", "venue", "year", "url", "n_citations", "dblp_key"):
         if getattr(into, field) is None and getattr(other, field) is not None:
@@ -46,7 +57,13 @@ def deduplicate(
         match = None
         for existing in kept:
             ex_doi = existing.doi.lower().strip() if existing.doi else None
-            if doi and ex_doi and ex_doi != doi:
+            # Conflicting DOIs block a merge unless one side is a preprint
+            if (
+                doi
+                and ex_doi
+                and ex_doi != doi
+                and not (_is_weak_doi(doi) or _is_weak_doi(ex_doi))
+            ):
                 continue
             if (
                 fuzz.token_sort_ratio(norm, normalize_title(existing.title))
@@ -58,8 +75,10 @@ def deduplicate(
         if match is not None:
             _merge(match, r)
             removed += 1
-            if match.doi:  # a DOI may have been backfilled during merge
+            if match.doi:
                 by_doi[match.doi.lower().strip()] = match
+            if doi:
+                by_doi[doi] = match
             continue
 
         kept.append(r)

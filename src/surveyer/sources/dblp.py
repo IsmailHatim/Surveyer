@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import httpx
+import structlog
+
 from surveyer.models import Record
 from surveyer.sources.base import HttpClient
 
+log = structlog.get_logger()
+
 API = "https://dblp.org/search/publ/api"
+# Official DBLP mirror with identical content.
+MIRROR_API = "https://dblp.uni-trier.de/search/publ/api"
 
 
 def _as_list(value) -> list:
@@ -45,10 +52,18 @@ class DblpSource:
     def __init__(self, client: HttpClient) -> None:
         """Initialise the DBLP source with the given HTTP client."""
         self.client = client
+        self.api = API
 
     def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search DBLP and return records."""
-        raw = self.client.get_json(
-            API, params={"q": terms, "format": "json", "h": max_results}
-        )
+        """Search DBLP and return records, falling back to the Trier mirror."""
+        params = {"q": terms, "format": "json", "h": max_results}
+        try:
+            raw = self.client.get_json(self.api, params=params)
+        except (httpx.HTTPError, RuntimeError):
+            if self.api == MIRROR_API:
+                raise  # the mirror failed too
+            log.warning("dblp.primary_failed", fallback=MIRROR_API)
+            # Sticky: dblp.org is rate-limiting us
+            self.api = MIRROR_API
+            raw = self.client.get_json(self.api, params=params)
         return parse_dblp(raw)

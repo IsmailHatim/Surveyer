@@ -53,6 +53,47 @@ def test_dedup_distinct_dois_not_merged_despite_similar_title():
     assert removed == 0
 
 
+def test_dedup_merges_preprint_doi_into_publisher_doi():
+    # arXiv preprint and publisher version of the same paper
+    a = Record(title="SDR-GNN for incomplete learning", doi="10.48550/arXiv.2411.19822")
+    b = Record(
+        title="SDR-GNN for incomplete learning", doi="10.1016/j.knosys.2024.112825"
+    )
+    merged, removed = deduplicate([a, b])
+    assert len(merged) == 1
+    assert removed == 1
+    assert merged[0].doi == "10.1016/j.knosys.2024.112825"
+
+
+def test_dedup_merges_publisher_doi_then_preprint():
+    # Same paper, publisher version first
+    a = Record(
+        title="GCNet: Graph Completion Network", doi="10.1109/tpami.2023.3234553"
+    )
+    b = Record(title="GCNet: Graph Completion Network", doi="10.48550/arxiv.2203.02177")
+    merged, removed = deduplicate([a, b])
+    assert len(merged) == 1
+    assert removed == 1
+    assert merged[0].doi == "10.1109/tpami.2023.3234553"
+
+
+def test_dedup_zenodo_doi_is_weak_too():
+    a = Record(title="GraphPL: Robust Imputation", doi="10.5281/zenodo.19849992")
+    b = Record(title="GraphPL: Robust Imputation", doi="10.1109/icassp.2026.11465108")
+    merged, removed = deduplicate([a, b])
+    assert len(merged) == 1
+    assert merged[0].doi == "10.1109/icassp.2026.11465108"
+
+
+def test_dedup_two_publisher_dois_still_distinct():
+    # Two strong (publisher) DOIs with the same title stay separate records.
+    a = Record(title="GSDNet: Revisiting Incompleteness", doi="10.24963/ijcai.2024/688")
+    b = Record(title="GSDNet: Revisiting Incompleteness", doi="10.24963/ijcai.2025/688")
+    merged, removed = deduplicate([a, b])
+    assert len(merged) == 2
+    assert removed == 0
+
+
 def test_dedup_backfills_missing_fields():
     a = Record(title="Paper one", doi="10.1/z", sources=["dblp"])
     b = Record(title="Paper two", doi="10.1/z", abstract="hello", sources=["openalex"])
