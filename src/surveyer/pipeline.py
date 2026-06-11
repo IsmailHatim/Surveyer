@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import msgspec
 import structlog
@@ -16,6 +17,9 @@ from surveyer.ledger import save_ledger
 from surveyer.models import Ledger, Record, SourceCount
 from surveyer.prisma import render_prisma
 from surveyer.sources import build_registry, fetch_all
+
+if TYPE_CHECKING:
+    from surveyer.bibtex import BibtexResolver
 
 log = structlog.get_logger()
 
@@ -33,7 +37,7 @@ def run_pipeline(
     *,
     registry: dict | None = None,
     scorer: Scorer | None = None,
-    resolver: object | None = None,
+    resolver: BibtexResolver | None = None,
     resolve_bibtex: bool = True,
 ) -> PipelineResult:
     """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma."""
