@@ -107,12 +107,19 @@ class FilterConfig(msgspec.Struct, kw_only=True):
     llm: LLMConfig = msgspec.field(default_factory=LLMConfig)
 
 
+class ExtendConfig(msgspec.Struct, kw_only=True):
+    """Extend-mode configuration: build on a manually screened workbook."""
+
+    xlsx: str
+
+
 class SurveyConfig(msgspec.Struct, kw_only=True):
     """Top level Survey configuration."""
 
     project: ProjectConfig
     search: SearchConfig
     filter: FilterConfig = msgspec.field(default_factory=FilterConfig)
+    extend: ExtendConfig | None = None
 
 
 def _validate_concepts(concepts: dict[str, list[str]] | None, where: str) -> None:
@@ -152,6 +159,18 @@ def load_config(path: str | Path) -> SurveyConfig:
             f"Unknown export format: {cfg.project.export_format!r}. "
             f"Valid formats: {', '.join(sorted(VALID_EXPORT_FORMATS))}"
         )
+    if cfg.extend is not None:
+        baseline = Path(cfg.extend.xlsx)
+        if not baseline.is_file():
+            raise ValueError(f"extend.xlsx not found: {baseline}")
+        if cfg.project.export_format != "xlsx":
+            raise ValueError('[extend] requires project.export_format = "xlsx"')
+        out_xlsx = Path(cfg.project.output_dir) / "survey.xlsx"
+        if baseline.resolve() == out_xlsx.resolve():
+            raise ValueError(
+                "extend.xlsx is the file this run would write; "
+                "use a different project.output_dir"
+            )
     if cfg.filter.llm.provider not in VALID_LLM_PROVIDERS:
         raise ValueError(
             f"Unknown LLM provider: {cfg.filter.llm.provider!r}. "
