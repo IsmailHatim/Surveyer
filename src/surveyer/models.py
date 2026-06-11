@@ -44,6 +44,8 @@ class Ledger(msgspec.Struct, kw_only=True):
     excluded_llm: int = 0
     included: int = 0
     failed_sources: list[str] = []
+    previously_included: int = 0
+    already_screened: int = 0
 
     def total_identified(self) -> int:
         """Records identified across all sources before deduplication."""
@@ -52,3 +54,7 @@ class Ledger(msgspec.Struct, kw_only=True):
     def after_dedup(self) -> int:
         """Records remaining after duplicates removed."""
         return self.total_identified() - self.duplicates_removed
+
+    def total_included(self) -> int:
+        """Studies in the final review: carried over plus newly included."""
+        return self.previously_included + self.included

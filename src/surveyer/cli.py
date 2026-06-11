@@ -80,5 +80,35 @@ def prisma(config: str = typer.Option(..., "--config", "-c")) -> None:
     typer.echo(f"PRISMA written to {out}/prisma.{{svg,pdf,png,mmd}}")
 
 
+@app.command()
+def extend(
+    config: str = typer.Option(..., "--config", "-c", help="Path to survey.toml"),
+) -> None:
+    """Extend a screened survey: new queries on top of a screened xlsx."""
+    cfg = load_config(config)
+    if cfg.extend is None:
+        typer.echo(
+            "Error: config has no [extend] section. "
+            'Add [extend]\\nxlsx = "runs/v1/survey.xlsx" to extend a run.',
+            err=True,
+        )
+        raise typer.Exit(1)
+    result = run_pipeline(cfg)
+    led = result.ledger
+    typer.echo(
+        f"Done. Carried over {led.previously_included} screened papers, "
+        f"skipped {led.already_screened} already screened, "
+        f"newly included {led.included} "
+        f"(total {led.total_included()}). "
+        f"Outputs in {cfg.project.output_dir}/"
+    )
+    if led.failed_sources:
+        typer.echo(
+            "Warning: these sources errored on one or more queries: "
+            f"{', '.join(led.failed_sources)}",
+            err=True,
+        )
+
+
 if __name__ == "__main__":
     app()
