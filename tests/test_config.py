@@ -197,7 +197,11 @@ def test_filter_concepts_default_none(tmp_path):
 
 def test_filter_concept_empty_list_rejected(tmp_path):
     p = tmp_path / "survey.toml"
-    p.write_text(FILTER_CONCEPTS_SAMPLE.replace('graph = ["graph neural network", "GNN"]', "graph = []"))
+    p.write_text(
+        FILTER_CONCEPTS_SAMPLE.replace(
+            'graph = ["graph neural network", "GNN"]', "graph = []"
+        )
+    )
     with pytest.raises(ValueError, match="must have at least one synonym") as excinfo:
         load_config(p)
     assert "graph" in str(excinfo.value)
@@ -206,7 +210,9 @@ def test_filter_concept_empty_list_rejected(tmp_path):
 
 def test_filter_concept_blank_synonym_rejected(tmp_path):
     p = tmp_path / "survey.toml"
-    p.write_text(FILTER_CONCEPTS_SAMPLE.replace('"missing", "incomplete"', '"missing", "  "'))
+    p.write_text(
+        FILTER_CONCEPTS_SAMPLE.replace('"missing", "incomplete"', '"missing", "  "')
+    )
     with pytest.raises(ValueError, match="has an empty synonym") as excinfo:
         load_config(p)
     assert "missingness" in str(excinfo.value)
@@ -343,3 +349,74 @@ def test_resolved_queries_no_warning_at_threshold():
     with structlog.testing.capture_logs() as logs:
         cfg.resolved_queries()
     assert [e for e in logs if e["event"] == "concepts.explosion"] == []
+
+
+EXTEND_SAMPLE = """
+[project]
+name = "demo-v2"
+output_dir = "OUT"
+
+[search]
+sources = ["dblp"]
+
+[[search.queries]]
+label = "new-angle"
+terms = "fresh terms"
+
+[extend]
+xlsx = "BASELINE"
+"""
+
+
+def _write_extend_config(tmp_path):
+    baseline = tmp_path / "v1.xlsx"
+    baseline.touch()
+    p = tmp_path / "survey.toml"
+    src = EXTEND_SAMPLE.replace("OUT", str(tmp_path / "out")).replace(
+        "BASELINE", str(baseline)
+    )
+    p.write_text(src)
+    return p, baseline
+
+
+def test_extend_config_parsed(tmp_path):
+    p, baseline = _write_extend_config(tmp_path)
+    cfg = load_config(p)
+    assert cfg.extend is not None
+    assert cfg.extend.xlsx == str(baseline)
+
+
+def test_extend_defaults_none(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(SAMPLE)
+    assert load_config(p).extend is None
+
+
+def test_extend_missing_baseline_rejected(tmp_path):
+    p, baseline = _write_extend_config(tmp_path)
+    baseline.unlink()
+    with pytest.raises(ValueError, match="extend.xlsx not found"):
+        load_config(p)
+
+
+def test_extend_rejects_csv_format(tmp_path):
+    p, _ = _write_extend_config(tmp_path)
+    src = p.read_text().replace(
+        'name = "demo-v2"', 'name = "demo-v2"\nexport_format = "csv"'
+    )
+    p.write_text(src)
+    with pytest.raises(ValueError, match="export_format"):
+        load_config(p)
+
+
+def test_extend_rejects_overwriting_baseline(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    baseline = out / "survey.xlsx"
+    baseline.touch()
+    p = tmp_path / "survey.toml"
+    p.write_text(
+        EXTEND_SAMPLE.replace("OUT", str(out)).replace("BASELINE", str(baseline))
+    )
+    with pytest.raises(ValueError, match="output_dir"):
+        load_config(p)

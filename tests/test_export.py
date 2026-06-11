@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import polars as pl
 from openpyxl import load_workbook
+from openpyxl.comments import Comment
+from openpyxl.styles import PatternFill
 
 from surveyer.export import (
     _to_frame,
     export_bibtex,
     export_csv,
+    export_extended,
+    export_extended_xlsx,
     export_results,
     export_xlsx,
 )
@@ -141,3 +145,157 @@ def test_export_results_csv_writes_references_and_columns(tmp_path):
     papers = (tmp_path / "papers.csv").read_text()
     assert "bibtex" in papers
     assert "@misc{a}" in papers
+
+
+def test_summary_includes_extend_stages_when_extending(tmp_path):
+    ledger = Ledger(included=2, previously_included=5, already_screened=3)
+    out = tmp_path / "survey.xlsx"
+    export_xlsx([], [], ledger, out)
+
+    ws = load_workbook(out)["summary"]
+    stages = [row[0].value for row in ws.iter_rows(min_row=2)]
+    assert "already_screened" in stages
+    assert "previously_included" in stages
+    assert "total_included" in stages
+
+
+def test_summary_omits_extend_stages_for_normal_runs(tmp_path):
+    out = tmp_path / "survey.xlsx"
+    export_xlsx([], [], Ledger(included=2), out)
+
+    ws = load_workbook(out)["summary"]
+    stages = [row[0].value for row in ws.iter_rows(min_row=2)]
+    assert "previously_included" not in stages
+
+
+def _screened_baseline(path):
+    """A v1 workbook with manual screening artifacts: a fill and a comment."""
+    kept = [Record(title="Old kept paper", doi="10.1/old")]
+    excluded = [Record(title="Old excluded paper", exclusion_reason="manual")]
+    export_xlsx(kept, excluded, Ledger(included=1), path)
+    wb = load_workbook(path)
+    cell = wb["papers"]["A2"]
+    cell.fill = PatternFill(
+        start_color="FFFFC000", end_color="FFFFC000", fill_type="solid"
+    )
+    cell.comment = Comment("double-checked, keep", "screener")
+    wb.save(path)
+
+
+def test_export_extended_xlsx_appends_and_preserves_formatting(tmp_path):
+    baseline = tmp_path / "v1.xlsx"
+    _screened_baseline(baseline)
+    out = tmp_path / "v2" / "survey.xlsx"
+    ledger = Ledger(included=1, previously_included=1, already_screened=2)
+
+    export_extended_xlsx(
+        baseline,
+        [Record(title="Old kept paper", doi="10.1/old")],
+        [Record(title="New kept paper", doi="10.1/new", llm_score=0.8)],
+        [Record(title="New excluded paper", exclusion_reason="no graph")],
+        ledger,
+        out,
+    )
+
+    wb = load_workbook(out)
+    papers = wb["papers"]
+    assert papers["A2"].value == "Old kept paper"
+    assert papers["A2"].fill.start_color.rgb == "FFFFC000"
+    assert papers["A2"].comment is not None
+    assert papers["A2"].comment.text == "double-checked, keep"
+    assert papers["A3"].value == "New kept paper"
+
+    excluded = wb["excluded"]
+    assert excluded["A2"].value == "Old excluded paper"
+    assert excluded["A3"].value == "New excluded paper"
+
+    stages = [row[0].value for row in wb["summary"].iter_rows(min_row=2)]
+    assert "total_included" in stages
+
+
+def test_export_extended_xlsx_leaves_baseline_untouched(tmp_path):
+    baseline = tmp_path / "v1.xlsx"
+    _screened_baseline(baseline)
+    before = baseline.read_bytes()
+
+    export_extended_xlsx(
+        baseline,
+        [Record(title="Old kept paper", doi="10.1/old")],
+        [Record(title="New kept paper")],
+        [],
+        Ledger(included=1, previously_included=1),
+        tmp_path / "v2" / "survey.xlsx",
+    )
+
+    assert baseline.read_bytes() == before
+
+
+def test_export_extended_writes_bibtex_for_all_kept(tmp_path):
+    baseline = tmp_path / "v1.xlsx"
+    _screened_baseline(baseline)
+    all_kept = [
+        Record(title="Old kept paper", bibtex="@misc{old}"),
+        Record(title="New kept paper", bibtex="@misc{new}"),
+    ]
+
+    export_extended(
+        baseline,
+        all_kept,
+        [Record(title="New kept paper", bibtex="@misc{new}")],
+        [],
+        Ledger(included=1, previously_included=1),
+        tmp_path / "v2",
+    )
+
+    assert (tmp_path / "v2" / "survey.xlsx").exists()
+    text = (tmp_path / "v2" / "references.bib").read_text()
+    assert "@misc{old}" in text
+    assert "@misc{new}" in text
+
+
+def test_export_extended_backfills_bibtex_on_baseline_rows(tmp_path):
+    baseline = tmp_path / "v1.xlsx"
+    # Hand-added baseline paper: no bibtex cell in the workbook.
+    export_xlsx([Record(title="Hand-added paper")], [], Ledger(included=1), baseline)
+    # The pipeline later resolves bibtex on the in-memory record.
+    resolved = Record(
+        title="Hand-added paper", bibtex="@misc{hand}", bibtex_source="local"
+    )
+    out = tmp_path / "v2" / "survey.xlsx"
+
+    export_extended_xlsx(
+        baseline, [resolved], [], [], Ledger(included=0, previously_included=1), out
+    )
+
+    ws = load_workbook(out)["papers"]
+    header = [c.value for c in ws[1]]
+    bib_col = header.index("bibtex") + 1
+    src_col = header.index("bibtex_source") + 1
+    assert ws.cell(row=2, column=bib_col).value == "@misc{hand}"
+    assert ws.cell(row=2, column=src_col).value == "local"
+
+
+def test_export_extended_backfills_bibtex_with_padded_title(tmp_path):
+    """Baseline title with stray whitespace still backfills from a stripped record."""
+    baseline = tmp_path / "v1.xlsx"
+    export_xlsx([Record(title="Hand-added paper")], [], Ledger(included=1), baseline)
+    # Simulate stray whitespace in cell that was hand-typed.
+    wb = load_workbook(baseline)
+    ws = wb["papers"]
+    header = [c.value for c in ws[1]]
+    title_col = header.index("title") + 1
+    ws.cell(row=2, column=title_col).value = "  Hand-added paper  "
+    wb.save(baseline)
+
+    resolved = Record(
+        title="Hand-added paper", bibtex="@misc{hand}", bibtex_source="local"
+    )
+    out = tmp_path / "v2" / "survey.xlsx"
+    export_extended_xlsx(
+        baseline, [resolved], [], [], Ledger(included=0, previously_included=1), out
+    )
+
+    ws2 = load_workbook(out)["papers"]
+    header2 = [c.value for c in ws2[1]]
+    bib_col = header2.index("bibtex") + 1
+    assert ws2.cell(row=2, column=bib_col).value == "@misc{hand}"

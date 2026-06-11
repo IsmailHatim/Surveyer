@@ -40,6 +40,13 @@ def to_mermaid(model: PrismaModel) -> str:
             lines.append(f"    {prev} --> {row.id}")
         prev = row.id
 
+    if model.previous_included is not None:
+        lines.append(
+            '    previous["Studies included in previous version of review'
+            f'<br/>n = {model.previous_included}"]'
+        )
+        lines.append("    previous --> total")
+
     if model.query_panel:
         panel = model.query_panel.replace("\n", "<br/>")
         lines.append(f'    query["Search query<br/>{panel}"]')

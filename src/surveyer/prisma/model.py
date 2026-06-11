@@ -40,6 +40,7 @@ class PrismaModel(msgspec.Struct, kw_only=True):
     query_panel: str | None = None
     show_manual_screening: bool = False
     llm_model: str | None = None
+    previous_included: int | None = None
 
 
 def _build_query_panel(search: SearchConfig) -> str | None:
@@ -66,11 +67,24 @@ def build_model(
     show_manual_screening: bool = False,
 ) -> PrismaModel:
     """Derive a PrismaModel from a provenance ledger and the search config."""
-    after_dedup = ledger.after_dedup()
+    after_dedup = ledger.after_dedup() - ledger.already_screened
     assessed = after_dedup - ledger.excluded_keyword
     keyword_breakdown = sorted(
         ledger.excluded_keyword_reasons.items(), key=lambda kv: kv[1], reverse=True
     )
+
+    dedup_exclusion = ExclusionBox(
+        label="Duplicates removed", count=ledger.duplicates_removed
+    )
+    if ledger.already_screened:
+        dedup_exclusion = ExclusionBox(
+            label="Records removed before screening",
+            count=ledger.duplicates_removed + ledger.already_screened,
+            breakdown=[
+                ("duplicate records", ledger.duplicates_removed),
+                ("already screened in previous version", ledger.already_screened),
+            ],
+        )
 
     rows: list[Row] = [
         Row(
@@ -84,9 +98,7 @@ def build_model(
             swimlane="identification",
             title="Records after duplicates removed",
             count=after_dedup,
-            exclusion=ExclusionBox(
-                label="Duplicates removed", count=ledger.duplicates_removed
-            ),
+            exclusion=dedup_exclusion,
         ),
         Row(
             id="screened",
@@ -121,14 +133,32 @@ def build_model(
                 dashed=True,
             )
         )
-    rows.append(
-        Row(
-            id="included",
-            swimlane="included",
-            title="Studies included",
-            count=ledger.included,
+    if ledger.previously_included:
+        rows.append(
+            Row(
+                id="included",
+                swimlane="included",
+                title="New studies included",
+                count=ledger.included,
+            )
         )
-    )
+        rows.append(
+            Row(
+                id="total",
+                swimlane="included",
+                title="Total studies included in review",
+                count=ledger.total_included(),
+            )
+        )
+    else:
+        rows.append(
+            Row(
+                id="included",
+                swimlane="included",
+                title="Studies included",
+                count=ledger.included,
+            )
+        )
 
     return PrismaModel(
         sources=[(sc.source, sc.count) for sc in ledger.identified],
@@ -139,4 +169,5 @@ def build_model(
         query_panel=_build_query_panel(search),
         show_manual_screening=show_manual_screening,
         llm_model=llm_model,
+        previous_included=ledger.previously_included or None,
     )

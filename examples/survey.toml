@@ -3,6 +3,9 @@ name = "secure-aggregation-survey"
 output_dir = "runs/secure-aggregation"
 export_format = "xlsx" # or "csv"
 
+# [extend]
+# xlsx = "runs/v1/survey.xlsx"  # path to the screened v1 workbook
+
 [search]
 year_min = 2018
 year_max = 2026
