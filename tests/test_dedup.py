@@ -59,3 +59,14 @@ def test_dedup_backfills_missing_fields():
     merged, removed = deduplicate([a, b])
     assert len(merged) == 1
     assert merged[0].abstract == "hello"
+
+
+def test_dedup_backfills_dblp_key():
+    # First record has the DOI but no DBLP key
+    records = [
+        Record(title="Same paper", doi="10.1/x"),
+        Record(title="Same paper", doi="10.1/x", dblp_key="conf/abc/Foo24"),
+    ]
+    deduped, removed = deduplicate(records)
+    assert removed == 1
+    assert deduped[0].dblp_key == "conf/abc/Foo24"

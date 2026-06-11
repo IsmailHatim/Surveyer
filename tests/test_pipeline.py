@@ -41,12 +41,52 @@ def _cfg(tmp_path) -> SurveyConfig:
     )
 
 
+class FakeResolver:
+    def __init__(self):
+        self.called_with = None
+
+    def resolve_all(self, records):
+        self.called_with = records
+        for r in records:
+            r.bibtex = f"@misc{{{r.title}}}"
+            r.bibtex_source = "local"
+
+
+def test_run_pipeline_resolves_bibtex(tmp_path):
+    cfg = _cfg(tmp_path)
+    resolver = FakeResolver()
+    result = run_pipeline(
+        cfg,
+        registry={"fake": FakeSource()},
+        scorer=FakeScorer(),
+        resolver=resolver,
+    )
+    assert resolver.called_with is result.kept
+    assert all(r.bibtex for r in result.kept)
+    assert (tmp_path / "references.bib").exists()
+
+
+def test_run_pipeline_can_skip_bibtex(tmp_path):
+    cfg = _cfg(tmp_path)
+    resolver = FakeResolver()
+    result = run_pipeline(
+        cfg,
+        registry={"fake": FakeSource()},
+        scorer=FakeScorer(),
+        resolver=resolver,
+        resolve_bibtex=False,
+    )
+    assert resolver.called_with is None  # resolver never invoked
+    assert all(r.bibtex is None for r in result.kept)
+
+
 def test_run_pipeline_end_to_end(tmp_path):
     cfg = _cfg(tmp_path)
     result = run_pipeline(
         cfg,
         registry={"fake": FakeSource()},
         scorer=FakeScorer(),
+        resolve_bibtex=False,  # predates bibtex feature; avoid network calls
     )
     assert result.ledger.total_identified() == 3
     assert result.ledger.duplicates_removed == 1
