@@ -15,6 +15,28 @@ from surveyer.pipeline import run_pipeline
 app = typer.Typer(add_completion=False, help="Reproducible survey literature search.")
 
 
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    config: str | None = typer.Option(
+        None, "--config", "-c", help="Open this survey.toml in the dashboard."
+    ),
+) -> None:
+    """Launch the interactive dashboard when no subcommand is given."""
+    if ctx.invoked_subcommand is not None:
+        return
+    try:
+        import surveyer.tui as tui
+    except ImportError:
+        typer.echo(
+            "The dashboard needs the 'tui' extra: uv sync --extra tui "
+            "(or: pip install 'surveyer[tui]')"
+        )
+        typer.echo(ctx.get_help())
+        raise typer.Exit(0) from None
+    tui.run_tui(config)
+
+
 @app.command()
 def run(
     config: str = typer.Option(..., "--config", "-c", help="Path to survey.toml"),
