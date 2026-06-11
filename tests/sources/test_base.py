@@ -30,7 +30,9 @@ def test_http_client_retries_on_500(tmp_path):
         return httpx.Response(code, json={"ok": True})
 
     transport = httpx.MockTransport(handler)
-    client = HttpClient(cache_dir=tmp_path, transport=transport, max_retries=3, backoff=0.0)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=3, backoff=0.0
+    )
 
     out = client.get_json("https://example.test/y", params={})
     assert out == {"ok": True}
@@ -47,7 +49,9 @@ def test_http_client_backoff_is_exponential(tmp_path, monkeypatch):
         return httpx.Response(seq.pop(0), json={"ok": True})
 
     transport = httpx.MockTransport(handler)
-    client = HttpClient(cache_dir=tmp_path, transport=transport, max_retries=4, backoff=1.0)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=4, backoff=1.0
+    )
 
     assert client.get_json("https://example.test/b", params={}) == {"ok": True}
     assert waits == [1.0, 2.0, 4.0]
@@ -64,7 +68,9 @@ def test_http_client_honors_retry_after_over_backoff(tmp_path, monkeypatch):
         return httpx.Response(code, json={"ok": True}, headers=headers)
 
     transport = httpx.MockTransport(handler)
-    client = HttpClient(cache_dir=tmp_path, transport=transport, max_retries=4, backoff=1.0)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=4, backoff=1.0
+    )
 
     assert client.get_json("https://example.test/ra", params={}) == {"ok": True}
     assert waits == [7.0]
@@ -84,7 +90,9 @@ def test_http_client_retries_on_transport_error(tmp_path):
         return httpx.Response(200, json={"ok": True})
 
     transport = httpx.MockTransport(handler)
-    client = HttpClient(cache_dir=tmp_path, transport=transport, max_retries=3, backoff=0.0)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=3, backoff=0.0
+    )
 
     out = client.get_json("https://example.test/z", params={})
     assert out == {"ok": True}
@@ -96,7 +104,9 @@ def test_http_client_gives_up_on_persistent_transport_error(tmp_path):
         raise httpx.ConnectError("refused", request=request)
 
     transport = httpx.MockTransport(handler)
-    client = HttpClient(cache_dir=tmp_path, transport=transport, max_retries=3, backoff=0.0)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=3, backoff=0.0
+    )
 
     try:
         client.get_json("https://example.test/down", params={})

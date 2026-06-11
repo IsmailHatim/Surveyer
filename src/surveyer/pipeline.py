@@ -72,6 +72,7 @@ def run_pipeline(
     # 2. Deduplicate
     deduped, removed = deduplicate(records)
     ledger.duplicates_removed = removed
+    log.info("dedup.done", removed=removed, remaining=len(deduped))
 
     # 2bis. Drop records already screened in the baseline workbook.
     if baseline is not None:
@@ -85,6 +86,7 @@ def run_pipeline(
     )
     ledger.excluded_keyword = excluded_kw
     ledger.excluded_keyword_reasons = kw_reasons
+    log.info("filter.keyword_done", excluded=excluded_kw, remaining=len(after_kw))
     kept_kw_ids = {id(r) for r in after_kw}
     dropped: list[Record] = [r for r in deduped if id(r) not in kept_kw_ids]
 
@@ -135,11 +137,13 @@ def run_pipeline(
         export_results(
             after_llm, dropped, ledger, out_dir, fmt=cfg.project.export_format
         )
+    log.info("export.done", out_dir=str(out_dir), fmt=cfg.project.export_format)
     render_prisma(
         ledger,
         cfg.search,
         out_dir,
         llm_model=cfg.filter.llm.model if cfg.filter.llm.enabled else None,
     )
+    log.info("prisma.done", out=str(out_dir / "prisma"))
 
     return PipelineResult(ledger=ledger, kept=kept_all, excluded=excluded_all)

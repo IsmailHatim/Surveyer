@@ -110,13 +110,15 @@ class BibtexResolver:
         """Resolve and set bibtex/bibtex_source on each record."""
         self._seen = set()
         n_local = 0
-        for r in records:
+        total = len(records)
+        for i, r in enumerate(records, start=1):
             text, source = self.resolve(r)
             r.bibtex = text
             r.bibtex_source = source
             if source == "local":
                 n_local += 1
-        log.info("bibtex.resolved", total=len(records), local_fallbacks=n_local)
+            log.info("bibtex.resolving", done=i, total=total, source=source)
+        log.info("bibtex.resolved", total=total, local_fallbacks=n_local)
 
 
 def build_resolver(cache_root: str | Path) -> BibtexResolver:

@@ -11,10 +11,13 @@
   <img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey">
   <a href="https://github.com/IsmailHatim/Surveyer/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/IsmailHatim/Surveyer?logo=github&color=yellow"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/IsmailHatim/Surveyer?color=teal"></a>
-  <a href="https://github.com/IsmailHatim/Surveyer/actions/workflows/ci.yml"><img alt="CI"
-    src="https://img.shields.io/github/actions/workflow/status/IsmailHatim/Surveyer/ci.yml?branch=main&logo=githubact
-    ions&logoColor=white&label=CI"></a>
+  <a href="https://github.com/IsmailHatim/Surveyer/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/IsmailHatim/Surveyer/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI"></a>
 </p>
+
+<div align="center">
+  <img src="figures/demo.gif" alt="Surveyer terminal dashboard demo" width="850"/>
+  <p><em>The built-in terminal dashboard: pick a config, tweak it, run the pipeline live.</em></p>
+</div>
 
 Surveyer is an open source Literature search tool for academic surveys: fetch from
 multiple sources, deduplicate, filter (keyword and LLM relevance), export to Excel
@@ -30,6 +33,8 @@ uv sync
 uv sync --extra scholar
 # optional local LLM scoring via Ollama:
 uv sync --extra ollama
+# optional TUI dashboard (textual + tomlkit):
+uv sync --extra tui
 ```
 
 ## Configure
@@ -99,6 +104,28 @@ LLM relevance scoring runs through `filter.llm`. Two providers are supported:
   `http://localhost:11434`; point it at any Ollama server on your network).
 
 ## Run
+
+### Terminal dashboard (easiest)
+
+```bash
+uv run surveyer                              # home screen → pick a config → edit → run
+uv run surveyer -c examples/survey.toml      # open a config directly
+# with credentials from .env:
+uv run --env-file .env surveyer
+```
+
+Everything is driven by a few keys:
+
+| Key | Action |
+|-----|--------|
+| `Enter` | choose a survey config |
+| `S` | save the config (validated first, comments preserved) |
+| `E` | open the TOML in `$EDITOR` (for concept blocks) |
+| `R` / `F` | run the full pipeline / fetch-only, with live logs and a PRISMA summary |
+| `O` | open the output folder (xlsx, references.bib, PRISMA figure) |
+| `Esc` / `Q` | back / quit |
+
+### Command line
 
 ```bash
 # Full run will create : runs/<name>/survey.xlsx, references.bib, ledger.json, prisma.{svg,pdf,png,mmd}

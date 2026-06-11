@@ -84,7 +84,9 @@ def fetch_all(
                 r.query_labels = [query.label]
             records.extend(hits)
             n += len(hits)
+            log.info("fetch.query_done", source=name, query=query.label, hits=len(hits))
         counts[name] = n
+        log.info("fetch.source_done", source=name, count=n)
         if had_error:
             failed.append(name)
     return records, counts, failed
