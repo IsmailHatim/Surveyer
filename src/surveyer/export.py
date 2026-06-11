@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import copy
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import polars as pl
 import xlsxwriter
+from openpyxl import load_workbook
 
 from surveyer.models import Ledger, Record
 
@@ -98,52 +100,50 @@ _BIBTEX_FLAG: ConditionalFormatDict = {
 }
 
 
+def _record_row(r: Record) -> dict:
+    """Map one record onto the export schema's column names."""
+    return {
+        "title": r.title,
+        "authors": "; ".join(r.authors),
+        "year": r.year,
+        "venue": r.venue,
+        "doi": r.doi,
+        "url": r.url,
+        "abstract": r.abstract,
+        "keywords": "; ".join(r.keywords),
+        "n_citations": r.n_citations,
+        "sources": "; ".join(r.sources),
+        "query_labels": "; ".join(r.query_labels),
+        "llm_score": r.llm_score,
+        "llm_reason": r.llm_reason,
+        "exclusion_reason": r.exclusion_reason,
+        "bibtex": r.bibtex,
+        "bibtex_source": r.bibtex_source,
+    }
+
+
 def _to_frame(records: list[Record]) -> pl.DataFrame:
-    rows = []
-    for r in records:
-        rows.append(
-            {
-                "title": r.title,
-                "authors": "; ".join(r.authors),
-                "year": r.year,
-                "venue": r.venue,
-                "doi": r.doi,
-                "url": r.url,
-                "abstract": r.abstract,
-                "keywords": "; ".join(r.keywords),
-                "n_citations": r.n_citations,
-                "sources": "; ".join(r.sources),
-                "query_labels": "; ".join(r.query_labels),
-                "llm_score": r.llm_score,
-                "llm_reason": r.llm_reason,
-                "exclusion_reason": r.exclusion_reason,
-                "bibtex": r.bibtex,
-                "bibtex_source": r.bibtex_source,
-            }
-        )
+    rows = [_record_row(r) for r in records]
     return pl.DataFrame(rows, schema=_SCHEMA).select(_COLUMNS)
 
 
 def _summary_frame(ledger: Ledger) -> pl.DataFrame:
+    stages: list[tuple[str, int]] = [
+        ("total_identified", ledger.total_identified()),
+        ("duplicates_removed", ledger.duplicates_removed),
+        ("after_dedup", ledger.after_dedup()),
+        ("excluded_keyword", ledger.excluded_keyword),
+        ("excluded_llm", ledger.excluded_llm),
+        ("included", ledger.included),
+    ]
+    if ledger.previously_included or ledger.already_screened:
+        stages += [
+            ("already_screened", ledger.already_screened),
+            ("previously_included", ledger.previously_included),
+            ("total_included", ledger.total_included()),
+        ]
     return pl.DataFrame(
-        {
-            "stage": [
-                "total_identified",
-                "duplicates_removed",
-                "after_dedup",
-                "excluded_keyword",
-                "excluded_llm",
-                "included",
-            ],
-            "count": [
-                ledger.total_identified(),
-                ledger.duplicates_removed,
-                ledger.after_dedup(),
-                ledger.excluded_keyword,
-                ledger.excluded_llm,
-                ledger.included,
-            ],
-        }
+        {"stage": [s for s, _ in stages], "count": [c for _, c in stages]}
     )
 
 
@@ -227,3 +227,83 @@ def export_results(
     else:
         raise ValueError(f"Unknown export format: {fmt!r}")
     export_bibtex(kept, out_dir)
+
+
+def _append_records(ws, records: list[Record]) -> None:
+    """Append records below existing rows, matching columns by header name."""
+    header = [cell.value for cell in ws[1]]
+    for r in records:
+        row = _record_row(r)
+        ws.append([row.get(name) for name in header])
+
+
+def _rewrite_summary(wb, ledger: Ledger) -> None:
+    """Replace the summary sheet with the extended ledger counts."""
+    if "summary" in wb.sheetnames:
+        del wb["summary"]
+    ws = wb.create_sheet("summary")
+    frame = _summary_frame(ledger)
+    ws.append(frame.columns)
+    for stage, count in frame.iter_rows():
+        ws.append([stage, count])
+
+
+def _patch_missing_bibtex(ws, records: list[Record]) -> None:
+    """Backfill bibtex bibtex_source cells that are empty in existing rows."""
+    header = [cell.value for cell in ws[1]]
+    if "bibtex" not in header or "title" not in header:
+        return
+    title_col = header.index("title") + 1
+    bib_col = header.index("bibtex") + 1
+    src_col = header.index("bibtex_source") + 1 if "bibtex_source" in header else None
+
+    resolved = {r.title.strip(): r for r in records if r.bibtex}
+    for row in ws.iter_rows(min_row=2):
+        title_cell = row[title_col - 1]
+        bib_cell = row[bib_col - 1]
+        if bib_cell.value:
+            continue
+        record = resolved.get(
+            str(title_cell.value).strip() if title_cell.value is not None else ""
+        )
+        if record is None:
+            continue
+        bib_cell.value = record.bibtex
+        if src_col is not None:
+            row[src_col - 1].value = record.bibtex_source
+
+
+def export_extended_xlsx(
+    baseline_path: str | Path,
+    all_kept: list[Record],
+    new_kept: list[Record],
+    new_excluded: list[Record],
+    ledger: Ledger,
+    path: str | Path,
+) -> None:
+    """Copy the screened workbook to path and append the new run's records."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(baseline_path, path)
+    wb = load_workbook(path)
+    _append_records(wb["papers"], new_kept)
+    _append_records(wb["excluded"], new_excluded)
+    _patch_missing_bibtex(wb["papers"], all_kept)
+    _rewrite_summary(wb, ledger)
+    wb.save(path)
+
+
+def export_extended(
+    baseline_path: str | Path,
+    all_kept: list[Record],
+    new_kept: list[Record],
+    new_excluded: list[Record],
+    ledger: Ledger,
+    out_dir: str | Path,
+) -> None:
+    """Write the extended survey.xlsx plus references.bib for all included."""
+    out_dir = Path(out_dir)
+    export_extended_xlsx(
+        baseline_path, all_kept, new_kept, new_excluded, ledger, out_dir / "survey.xlsx"
+    )
+    export_bibtex(all_kept, out_dir)
