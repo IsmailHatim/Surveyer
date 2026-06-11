@@ -109,7 +109,39 @@ uv run surveyer fetch --config examples/survey.toml
 
 # Render PRISMA from a saved ledger
 uv run surveyer prisma --config examples/survey.toml
+
+# Search new queries on top of a manually screened survey.xlsx
+uv run surveyer extend --config examples/survey_v2.toml
 ```
+
+## Extend a screened survey
+
+After a run, you typically screen `survey.xlsx` by hand: move rows between the
+`papers` and `excluded` sheets, add papers you found yourself, color cells or
+leave comments. To search for *additional* studies later (new queries or
+keywords) without redoing that work, point a new config at the screened
+workbook:
+
+```toml
+[extend]
+xlsx = "runs/v1/survey.xlsx"   # the manually screened workbook
+
+[project]
+output_dir = "runs/v2"         # must differ from the v1 run
+```
+
+Your manual decisions are final: papers in the `papers` sheet are always kept
+and never refiltered or rescored, papers in `excluded` stay excluded, and
+records the new search re-finds are dropped and counted as `already_screened`.
+The keyword and LLM filters apply only to newly discovered papers.
+
+The output `survey.xlsx` is a **copy** of your screened file with the new rows
+appended at the bottom of each sheet, manual colors and comments are
+preserved, and the original file is never modified. Hand added papers missing
+a BibTeX entry get one resolved and backfilled, `references.bib` covers old
+and new papers, and the PRISMA diagram switches to the PRISMA 2020 review
+update layout (previous-version box and cumulative total). Extending requires
+`export_format = "xlsx"`, and you can chain updates.
 
 ## Sources
 
@@ -124,7 +156,7 @@ uv run surveyer prisma --config examples/survey.toml
 ## Outputs
 
 - `survey.xlsx` - `papers`, `excluded`, and `summary` sheets.
-- `references.bib` - one BibTeX entry per included paper, ready to `\cite`.
+- `references.bib` - one BibTeX entry per included paper.
 - `ledger.json` - per-stage counts (the input to PRISMA).
 
 ### BibTeX citations
@@ -139,7 +171,7 @@ priority order:
 
 | `bibtex_source` | Where it comes from |
 |-----------------|---------------------|
-| `dblp` | DBLP's curated entry (`dblp.org/rec/<key>.bib`) — preferred |
+| `dblp` | DBLP's curated entry (`dblp.org/rec/<key>.bib`) preferred |
 | `doi` | CrossRef/DataCite via DOI content negotiation |
 | `local` | Minimal `@misc` built from the record's own metadata |
 
