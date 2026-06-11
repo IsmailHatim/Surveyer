@@ -42,5 +42,6 @@ def apply_keyword_filter(
         if reason is None:
             kept.append(record)
         else:
+            record.exclusion_reason = reason
             reasons[reason] = reasons.get(reason, 0) + 1
     return kept, len(records) - len(kept), reasons

@@ -167,5 +167,7 @@ def apply_llm_filter(
         r.llm_reason = reason
         if value >= cfg.threshold:
             kept.append(r)
+        else:
+            r.exclusion_reason = f"llm score {value:.2f} < threshold {cfg.threshold}"
     log.info("llm.scoring_done", total=total, kept=len(kept))
     return kept, len(records) - len(kept)

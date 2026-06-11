@@ -34,6 +34,7 @@ _SCHEMA: SchemaDict = {
     "query_labels": pl.Utf8,
     "llm_score": pl.Float64,
     "llm_reason": pl.Utf8,
+    "exclusion_reason": pl.Utf8,
     "bibtex": pl.Utf8,
     "bibtex_source": pl.Utf8,
 }
@@ -65,6 +66,7 @@ _COLUMN_WIDTHS: ColumnWidthsDefinition = {
     "query_labels": 110,
     "llm_score": 75,
     "llm_reason": 290,
+    "exclusion_reason": 180,
     "bibtex": 360,
     "bibtex_source": 90,
 }
@@ -114,6 +116,7 @@ def _to_frame(records: list[Record]) -> pl.DataFrame:
                 "query_labels": "; ".join(r.query_labels),
                 "llm_score": r.llm_score,
                 "llm_reason": r.llm_reason,
+                "exclusion_reason": r.exclusion_reason,
                 "bibtex": r.bibtex,
                 "bibtex_source": r.bibtex_source,
             }
