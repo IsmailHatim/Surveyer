@@ -17,9 +17,7 @@ def _model(**kw):
         excluded_llm=30,
         included=70,
     )
-    search = SearchConfig(
-        sources=["dblp"], queries=[Query(label="q1", terms="graph")]
-    )
+    search = SearchConfig(sources=["dblp"], queries=[Query(label="q1", terms="graph")])
     return build_model(ledger, search, **kw)
 
 
@@ -42,3 +40,23 @@ def test_to_mermaid_includes_query_panel():
 def test_to_mermaid_omits_llm_box():
     out = to_mermaid(_model(llm_model=None))
     assert "Records assessed by" not in out
+
+
+def test_mermaid_renders_previous_version_box():
+    ledger = Ledger(
+        identified=[SourceCount(source="dblp", count=10)],
+        duplicates_removed=2,
+        already_screened=3,
+        included=4,
+        previously_included=5,
+    )
+    model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
+    text = to_mermaid(model)
+    assert "Studies included in previous version of review" in text
+    assert "previous --> total" in text
+
+
+def test_mermaid_no_previous_box_for_normal_runs():
+    ledger = Ledger(identified=[SourceCount(source="dblp", count=10)], included=4)
+    model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
+    assert "previous" not in to_mermaid(model)

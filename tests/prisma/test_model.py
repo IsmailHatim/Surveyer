@@ -85,3 +85,49 @@ def test_build_model_query_panel_from_queries():
     m = build_model(_ledger(), _search())
     assert "q1" in m.query_panel
     assert "graph neural network" in m.query_panel
+
+
+def _extend_ledger():
+    return Ledger(
+        identified=[SourceCount(source="dblp", count=10)],
+        duplicates_removed=2,
+        already_screened=3,
+        excluded_keyword=1,
+        included=4,
+        previously_included=5,
+    )
+
+
+def test_build_model_extend_adjusts_counts():
+    model = build_model(_extend_ledger(), SearchConfig(sources=["dblp"], queries=[]))
+    rows = {r.id: r for r in model.rows}
+    # 10 identified - 2 duplicates - 3 already screened = 5 enter screening
+    assert rows["dedup"].count == 5
+    assert rows["screened"].count == 5
+    assert model.after_dedup == 5
+    excl = rows["dedup"].exclusion
+    assert excl.count == 5  # 2 + 3
+    assert ("already screened in previous version", 3) in excl.breakdown
+
+
+def test_build_model_extend_adds_total_box():
+    model = build_model(_extend_ledger(), SearchConfig(sources=["dblp"], queries=[]))
+    rows = {r.id: r for r in model.rows}
+    assert rows["included"].title == "New studies included"
+    assert rows["included"].count == 4
+    assert rows["total"].count == 9
+    assert model.previous_included == 5
+
+
+def test_build_model_without_extend_is_unchanged():
+    ledger = Ledger(
+        identified=[SourceCount(source="dblp", count=10)],
+        duplicates_removed=2,
+        included=4,
+    )
+    model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
+    rows = {r.id: r for r in model.rows}
+    assert "total" not in rows
+    assert rows["included"].title == "Studies included"
+    assert rows["dedup"].exclusion.label == "Duplicates removed"
+    assert model.previous_included is None

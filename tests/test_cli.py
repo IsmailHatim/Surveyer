@@ -129,3 +129,52 @@ def test_run_reports_bibtex(tmp_path, monkeypatch):
     result = runner.invoke(cli.app, ["run", "--config", str(cfg_path)])
     assert result.exit_code == 0, result.output
     assert "references.bib written (2 entries, 1 local fallbacks)" in result.output
+
+
+EXTEND_SAMPLE = """
+[project]
+name = "demo-v2"
+output_dir = "OUT"
+
+[search]
+sources = ["dblp"]
+[[search.queries]]
+label = "B"
+terms = "y"
+
+[extend]
+xlsx = "BASELINE"
+"""
+
+
+def test_extend_command_requires_section(tmp_path):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
+    result = runner.invoke(cli.app, ["extend", "--config", str(cfg_path)])
+    assert result.exit_code == 1
+    assert "[extend]" in result.output
+
+
+def test_extend_command_reports_counts(tmp_path, monkeypatch):
+    baseline = tmp_path / "v1.xlsx"
+    baseline.touch()
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(
+        EXTEND_SAMPLE.replace("OUT", str(tmp_path / "out")).replace(
+            "BASELINE", str(baseline)
+        )
+    )
+
+    def fake_run(cfg, **kwargs):
+        from surveyer.models import Ledger
+        from surveyer.pipeline import PipelineResult
+
+        ledger = Ledger(included=4, previously_included=5, already_screened=3)
+        return PipelineResult(ledger=ledger, kept=[], excluded=[])
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run)
+    result = runner.invoke(cli.app, ["extend", "--config", str(cfg_path)])
+    assert result.exit_code == 0, result.output
+    assert "5" in result.output  # carried over
+    assert "3" in result.output  # already screened
+    assert "9" in result.output  # total included
