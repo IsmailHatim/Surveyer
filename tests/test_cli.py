@@ -90,3 +90,42 @@ def test_run_command_invokes_pipeline(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert called["name"] == "demo"
     assert "5" in result.output
+
+
+def test_fetch_skips_bibtex(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
+
+    captured = {}
+
+    def fake_run(cfg, **kwargs):
+        captured.update(kwargs)
+        from surveyer.models import Ledger
+        from surveyer.pipeline import PipelineResult
+
+        return PipelineResult(ledger=Ledger(), kept=[], excluded=[])
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run)
+    result = runner.invoke(cli.app, ["fetch", "--config", str(cfg_path)])
+    assert result.exit_code == 0, result.output
+    assert captured.get("resolve_bibtex") is False
+
+
+def test_run_reports_bibtex(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
+
+    def fake_run(cfg, **kwargs):
+        from surveyer.models import Ledger, Record
+        from surveyer.pipeline import PipelineResult
+
+        kept = [
+            Record(title="A", bibtex_source="dblp"),
+            Record(title="B", bibtex_source="local"),
+        ]
+        return PipelineResult(ledger=Ledger(included=2), kept=kept, excluded=[])
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run)
+    result = runner.invoke(cli.app, ["run", "--config", str(cfg_path)])
+    assert result.exit_code == 0, result.output
+    assert "references.bib written (2 entries, 1 local fallbacks)" in result.output

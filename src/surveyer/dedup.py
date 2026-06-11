@@ -22,7 +22,7 @@ def _merge(into: Record, other: Record) -> None:
     into.sources = sorted(set(into.sources) | set(other.sources))
     into.query_labels = sorted(set(into.query_labels) | set(other.query_labels))
     # Backfill missing scalar fields from the duplicate.
-    for field in ("doi", "abstract", "venue", "year", "url", "n_citations"):
+    for field in ("doi", "abstract", "venue", "year", "url", "n_citations", "dblp_key"):
         if getattr(into, field) is None and getattr(other, field) is not None:
             setattr(into, field, getattr(other, field))
 

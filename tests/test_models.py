@@ -18,6 +18,13 @@ def test_record_carries_provenance():
     assert r.query_labels == ["A_attacks"]
 
 
+def test_record_bibtex_fields_default_none():
+    r = Record(title="A paper")
+    assert r.dblp_key is None
+    assert r.bibtex is None
+    assert r.bibtex_source is None
+
+
 def test_ledger_roundtrip_fields():
     led = Ledger(
         identified=[SourceCount(source="dblp", count=10)],

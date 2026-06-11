@@ -5,6 +5,27 @@ import json
 from surveyer.sources.dblp import parse_dblp
 
 
+def test_parse_dblp_captures_key():
+    raw = {
+        "result": {
+            "hits": {
+                "hit": [
+                    {
+                        "info": {
+                            "title": "Incomplete graph learning: A comprehensive survey.",
+                            "year": "2025",
+                            "key": "journals/nn/XiaLLLZZY25",
+                            "authors": {"author": [{"text": "Riting Xia"}]},
+                        }
+                    }
+                ]
+            }
+        }
+    }
+    [rec] = parse_dblp(raw)
+    assert rec.dblp_key == "journals/nn/XiaLLLZZY25"
+
+
 def test_parse_dblp(fixtures_dir):
     raw = json.loads((fixtures_dir / "dblp_sample.json").read_text())
     records = parse_dblp(raw)

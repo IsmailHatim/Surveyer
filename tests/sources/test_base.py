@@ -104,3 +104,43 @@ def test_http_client_gives_up_on_persistent_transport_error(tmp_path):
         pass
     else:  # pragma: no cover
         raise AssertionError("expected the transport error to propagate after retries")
+
+
+def test_get_text_caches(tmp_path):
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, text="@article{k, title={X}}")
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(cache_dir=tmp_path, transport=transport)
+
+    a = client.get_text("https://dblp.org/rec/k.bib")
+    b = client.get_text("https://dblp.org/rec/k.bib")
+    assert a == b == "@article{k, title={X}}"
+    assert calls["n"] == 1  # second call served from cache
+
+
+def test_get_text_returns_none_on_404(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="not found")
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(cache_dir=tmp_path, transport=transport)
+    assert client.get_text("https://doi.org/10.1/missing") is None
+
+
+def test_get_text_sends_per_call_headers(tmp_path):
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept"] = request.headers.get("accept", "")
+        return httpx.Response(200, text="@misc{k}")
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(cache_dir=tmp_path, transport=transport)
+    client.get_text(
+        "https://doi.org/10.1/x", headers={"Accept": "application/x-bibtex"}
+    )
+    assert seen["accept"] == "application/x-bibtex"

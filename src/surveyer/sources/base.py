@@ -39,12 +39,16 @@ class HttpClient:
         backoff: float = 1.0,
         max_backoff: float = 60.0,
         headers: dict[str, str] | None = None,
+        follow_redirects: bool = False,
     ) -> None:
         """Initialise the client with cache directory and retry settings."""
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._client = httpx.Client(
-            transport=transport, timeout=30.0, headers=headers or {}
+            transport=transport,
+            timeout=30.0,
+            headers=headers or {},
+            follow_redirects=follow_redirects,
         )
         self.min_interval = min_interval
         self.max_retries = max_retries
@@ -58,10 +62,20 @@ class HttpClient:
             return float(retry_after)
         return min(self.backoff * (2 ** (attempt - 1)), self.max_backoff)
 
-    def _cache_path(self, url: str, params: dict) -> Path:
-        key = json.dumps({"url": url, "params": params}, sort_keys=True)
+    def _cache_path(
+        self,
+        url: str,
+        params: dict,
+        *,
+        suffix: str = "json",
+        extra: dict | None = None,
+    ) -> Path:
+        payload: dict = {"url": url, "params": params}
+        if extra:
+            payload["extra"] = extra
+        key = json.dumps(payload, sort_keys=True)
         digest = hashlib.sha256(key.encode()).hexdigest()[:32]
-        return self.cache_dir / f"{digest}.json"
+        return self.cache_dir / f"{digest}.{suffix}"
 
     def get_json(self, url: str, *, params: dict) -> dict:
         """Fetch JSON from url with caching, rate limiting, and retries."""
@@ -94,6 +108,50 @@ class HttpClient:
             data = resp.json()
             cache.write_text(json.dumps(data))
             return data
+        raise RuntimeError(f"GET failed after {self.max_retries} attempts: {url}")
+
+    def get_text(
+        self,
+        url: str,
+        *,
+        params: dict | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> str | None:
+        """Fetch a text body (bibtex) with caching, throttling, and retries."""
+        params = params or {}
+        headers = headers or {}
+        cache = self._cache_path(url, params, suffix="txt", extra={"headers": headers})
+        if cache.exists():
+            text = cache.read_text()
+            return text or None
+
+        for attempt in range(1, self.max_retries + 1):
+            self._throttle()
+            try:
+                resp = self._client.get(url, params=params, headers=headers)
+            except httpx.TransportError as exc:
+                log.warning(
+                    "http.transport_error", url=url, attempt=attempt, error=str(exc)
+                )
+                if attempt < self.max_retries:
+                    time.sleep(self._retry_wait(attempt))
+                    continue
+                raise
+            if resp.status_code == 404:
+                cache.write_text("")  # cache the miss so reruns don't refetch
+                return None
+            if resp.status_code == 429 or resp.status_code >= 500:
+                log.warning(
+                    "http.retry", url=url, status=resp.status_code, attempt=attempt
+                )
+                if attempt < self.max_retries:
+                    time.sleep(
+                        self._retry_wait(attempt, resp.headers.get("Retry-After"))
+                    )
+                    continue
+            resp.raise_for_status()
+            cache.write_text(resp.text)
+            return resp.text or None
         raise RuntimeError(f"GET failed after {self.max_retries} attempts: {url}")
 
     def _throttle(self) -> None:
