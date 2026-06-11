@@ -140,6 +140,21 @@ def _build(model: PrismaModel, rail_width: float) -> graphviz.Digraph:
             dot.edge(prev, row.id)
         prev = row.id
 
+    if model.previous_included is not None:
+        dot.node(
+            "previous",
+            _text(
+                "Studies included in\nprevious version of review",
+                model.previous_included,
+            ),
+            fillcolor=_FILL_GREEN,
+        )
+        with dot.subgraph() as s:
+            s.attr(rank="same")
+            s.node("included")
+            s.node("previous")
+        dot.edge("previous", "total")
+
     _add_swimlane_bands(dot, model)
 
     # Search-query panel: to the right
