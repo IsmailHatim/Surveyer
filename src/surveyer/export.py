@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,8 @@ _SCHEMA: SchemaDict = {
     "query_labels": pl.Utf8,
     "llm_score": pl.Float64,
     "llm_reason": pl.Utf8,
+    "bibtex": pl.Utf8,
+    "bibtex_source": pl.Utf8,
 }
 
 _COLUMNS = list(_SCHEMA)
@@ -62,6 +65,8 @@ _COLUMN_WIDTHS: ColumnWidthsDefinition = {
     "query_labels": 110,
     "llm_score": 75,
     "llm_reason": 290,
+    "bibtex": 360,
+    "bibtex_source": 90,
 }
 
 # Yellow (low) to green (high) colour scale over the 0..1 llm_score.
@@ -74,6 +79,19 @@ _SCORE_COLOR_SCALE: ConditionalFormatDict = {
         "max_type": "num",
         "max_value": 1.0,
         "max_color": "#63BE7B",
+    }
+}
+
+# Single-line rows excel default size
+_ROW_HEIGHT = 21
+
+# Highlight locally-synthesized entries in red.
+_BIBTEX_FLAG: ConditionalFormatDict = {
+    "bibtex_source": {
+        "type": "text",
+        "criteria": "containing",
+        "value": "local",
+        "format": {"bg_color": "#FFC7CE", "font_color": "#9C0006"},
     }
 }
 
@@ -96,6 +114,8 @@ def _to_frame(records: list[Record]) -> pl.DataFrame:
                 "query_labels": "; ".join(r.query_labels),
                 "llm_score": r.llm_score,
                 "llm_reason": r.llm_reason,
+                "bibtex": r.bibtex,
+                "bibtex_source": r.bibtex_source,
             }
         )
     return pl.DataFrame(rows, schema=_SCHEMA).select(_COLUMNS)
@@ -124,6 +144,15 @@ def _summary_frame(ledger: Ledger) -> pl.DataFrame:
     )
 
 
+def export_bibtex(kept: list[Record], out_dir: str | Path) -> None:
+    """Write kept records BibTeX entries to references.bib in out_dir."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    entries = [r.bibtex for r in kept if r.bibtex]
+    text = "\n\n".join(entries)
+    (out_dir / "references.bib").write_text(text + "\n" if text else "")
+
+
 def export_xlsx(
     kept: list[Record],
     excluded: list[Record],
@@ -135,20 +164,23 @@ def export_xlsx(
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = xlsxwriter.Workbook(str(path))
     try:
+        # Deep-copy the combined conditional formats on each call
         _to_frame(kept).write_excel(
             workbook=wb,
             worksheet="papers",
             header_format=_HEADER_FORMAT,
-            conditional_formats=_SCORE_COLOR_SCALE,
+            conditional_formats=copy.deepcopy({**_SCORE_COLOR_SCALE, **_BIBTEX_FLAG}),
             column_widths=_COLUMN_WIDTHS,
+            row_heights=_ROW_HEIGHT,
             freeze_panes=(1, 0),
         )
         _to_frame(excluded).write_excel(
             workbook=wb,
             worksheet="excluded",
             header_format=_HEADER_FORMAT,
-            conditional_formats=_SCORE_COLOR_SCALE,
+            conditional_formats=copy.deepcopy({**_SCORE_COLOR_SCALE, **_BIBTEX_FLAG}),
             column_widths=_COLUMN_WIDTHS,
+            row_heights=_ROW_HEIGHT,
             freeze_panes=(1, 0),
         )
         _summary_frame(ledger).write_excel(
@@ -168,12 +200,7 @@ def export_csv(
     ledger: Ledger,
     out_dir: str | Path,
 ) -> None:
-    """Write kept and excluded records and a ledger summary as CSV files.
-
-    Unlike the .xlsx export, CSV has no concept of sheets or cell styling,
-    so each sheet is written to its own file in ``out_dir``: ``papers.csv``,
-    ``excluded.csv`` and ``summary.csv``.
-    """
+    """Write kept and excluded records and a ledger summary as CSV files."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     _to_frame(kept).write_csv(out_dir / "papers.csv")
@@ -188,7 +215,7 @@ def export_results(
     out_dir: str | Path,
     fmt: str = "xlsx",
 ) -> None:
-    """Export results to ``out_dir`` in the requested format ("xlsx" or "csv")."""
+    """Export results to out_dir in the requested format ("xlsx" or "csv")."""
     out_dir = Path(out_dir)
     if fmt == "csv":
         export_csv(kept, excluded, ledger, out_dir)
@@ -196,3 +223,4 @@ def export_results(
         export_xlsx(kept, excluded, ledger, out_dir / "survey.xlsx")
     else:
         raise ValueError(f"Unknown export format: {fmt!r}")
+    export_bibtex(kept, out_dir)
