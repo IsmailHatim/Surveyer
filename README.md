@@ -7,11 +7,9 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11+-informational?logo=python&logoColor=white"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="managed with uv" src="https://img.shields.io/badge/uv-managed-blueviolet?logo=uv&logoColor=white"></a>
-  <a href="https://github.com/astral-sh/ruff"><img alt="Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json"></a>
   <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-success">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey">
   <a href="https://github.com/IsmailHatim/Surveyer/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/IsmailHatim/Surveyer?logo=github&color=yellow"></a>
-  <a href="https://github.com/IsmailHatim/Surveyer/issues"><img alt="Issues" src="https://img.shields.io/github/issues/IsmailHatim/Surveyer?color=orange"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/IsmailHatim/Surveyer?color=teal"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/actions/workflows/ci.yml"><img alt="CI"
     src="https://img.shields.io/github/actions/workflow/status/IsmailHatim/Surveyer/ci.yml?branch=main&logo=githubact
@@ -19,8 +17,8 @@
 </p>
 
 Surveyer is an open source Literature search tool for academic surveys: fetch from
-multiple sources, deduplicate, filter (keyword and LLM relevance), export to Excel,
-and generate a PRISMA flow diagram.
+multiple sources, deduplicate, filter (keyword and LLM relevance), export to Excel
+with ready-to-use BibTeX citations, and generate a PRISMA flow diagram.
 It's reproducible and based on configuration files, so you can easily update your 
 survey as new papers come out or share it with collaborators.
 
@@ -103,10 +101,10 @@ LLM relevance scoring runs through `filter.llm`. Two providers are supported:
 ## Run
 
 ```bash
-# Full run will create : runs/<name>/survey.xlsx, ledger.json, prisma.{svg,pdf,png,mmd}
+# Full run will create : runs/<name>/survey.xlsx, references.bib, ledger.json, prisma.{svg,pdf,png,mmd}
 uv run surveyer run --config examples/survey.toml
 
-# Fetch and deduplicate only
+# Fetch and deduplicate only (skips BibTeX resolution)
 uv run surveyer fetch --config examples/survey.toml
 
 # Render PRISMA from a saved ledger
@@ -126,7 +124,30 @@ uv run surveyer prisma --config examples/survey.toml
 ## Outputs
 
 - `survey.xlsx` - `papers`, `excluded`, and `summary` sheets.
+- `references.bib` - one BibTeX entry per included paper, ready to `\cite`.
 - `ledger.json` - per-stage counts (the input to PRISMA).
+
+### BibTeX citations
+
+`surveyer run` resolves a BibTeX entry for every included paper and writes them
+to `references.bib`. Each entry also appears in a `bibtex` column of the
+`papers` sheet (and `papers.csv`), so you can copy a single citation straight
+from the spreadsheet.
+
+Entries are fetched from authoritative sources rather than synthesized, in
+priority order:
+
+| `bibtex_source` | Where it comes from |
+|-----------------|---------------------|
+| `dblp` | DBLP's curated entry (`dblp.org/rec/<key>.bib`) — preferred |
+| `doi` | CrossRef/DataCite via DOI content negotiation |
+| `local` | Minimal `@misc` built from the record's own metadata |
+
+`local` entries are a last resort for papers with neither a DBLP key nor a DOI;
+they are highlighted in red in the `.xlsx` so you can spot (and hand-fix) the
+lower-quality citations at a glance. In CSV, filter on the `bibtex_source`
+column instead. Fetched entries are cached under the run's `cache/` directory,
+so re-runs cost no extra network requests.
 
 ### PRISMA flow diagram
 
