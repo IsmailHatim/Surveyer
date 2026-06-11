@@ -31,6 +31,7 @@ def parse_dblp(raw: dict) -> list[Record]:
                 year=int(year) if year else None,
                 venue=info.get("venue"),
                 url=_as_list(ee)[0] if (ee := info.get("ee")) else None,
+                dblp_key=info.get("key"),
             )
         )
     return out
