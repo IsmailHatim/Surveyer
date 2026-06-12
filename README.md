@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11+-informational?logo=python&logoColor=white"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="managed with uv" src="https://img.shields.io/badge/uv-managed-blueviolet?logo=uv&logoColor=white"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-success">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.2.1-success">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey">
   <a href="https://github.com/IsmailHatim/Surveyer/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/IsmailHatim/Surveyer?logo=github&color=yellow"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/IsmailHatim/Surveyer?color=teal"></a>
@@ -35,6 +35,44 @@ uv sync --extra scholar
 uv sync --extra ollama
 # optional TUI dashboard (textual + tomlkit):
 uv sync --extra tui
+```
+
+## Run
+
+### Terminal dashboard (easiest)
+
+```bash
+uv run surveyer                              # home screen → pick a config → edit → run
+uv run surveyer -c examples/survey.toml      # open a config directly
+# with credentials from .env:
+uv run --env-file .env surveyer
+```
+
+Everything is driven by a few keys:
+
+| Key | Action |
+|-----|--------|
+| `Enter` | choose a survey config |
+| `S` | save the config (validated first, comments preserved) |
+| `E` | open the TOML in `$EDITOR` (for concept blocks) |
+| `R` / `F` | run the full pipeline / fetch-only, with live logs and a PRISMA summary |
+| `O` | open the output folder (xlsx, references.bib, PRISMA figure) |
+| `Esc` / `Q` | back / quit |
+
+### Command line
+
+```bash
+# Full run will create : runs/<name>/survey.xlsx, references.bib, ledger.json, prisma.{svg,pdf,png,mmd}
+uv run surveyer run --config examples/survey.toml
+
+# Fetch and deduplicate only (skips BibTeX resolution)
+uv run surveyer fetch --config examples/survey.toml
+
+# Render PRISMA from a saved ledger
+uv run surveyer prisma --config examples/survey.toml
+
+# Search new queries on top of a manually screened survey.xlsx
+uv run surveyer extend --config examples/survey_v2.toml
 ```
 
 ## Configure
@@ -102,44 +140,6 @@ LLM relevance scoring runs through `filter.llm`. Two providers are supported:
   API key needed. Install the extra (`uv sync --extra ollama`), then set
   `provider = "ollama"`, the `model` name, and `host` (default
   `http://localhost:11434`; point it at any Ollama server on your network).
-
-## Run
-
-### Terminal dashboard (easiest)
-
-```bash
-uv run surveyer                              # home screen → pick a config → edit → run
-uv run surveyer -c examples/survey.toml      # open a config directly
-# with credentials from .env:
-uv run --env-file .env surveyer
-```
-
-Everything is driven by a few keys:
-
-| Key | Action |
-|-----|--------|
-| `Enter` | choose a survey config |
-| `S` | save the config (validated first, comments preserved) |
-| `E` | open the TOML in `$EDITOR` (for concept blocks) |
-| `R` / `F` | run the full pipeline / fetch-only, with live logs and a PRISMA summary |
-| `O` | open the output folder (xlsx, references.bib, PRISMA figure) |
-| `Esc` / `Q` | back / quit |
-
-### Command line
-
-```bash
-# Full run will create : runs/<name>/survey.xlsx, references.bib, ledger.json, prisma.{svg,pdf,png,mmd}
-uv run surveyer run --config examples/survey.toml
-
-# Fetch and deduplicate only (skips BibTeX resolution)
-uv run surveyer fetch --config examples/survey.toml
-
-# Render PRISMA from a saved ledger
-uv run surveyer prisma --config examples/survey.toml
-
-# Search new queries on top of a manually screened survey.xlsx
-uv run surveyer extend --config examples/survey_v2.toml
-```
 
 ## Extend a screened survey
 
