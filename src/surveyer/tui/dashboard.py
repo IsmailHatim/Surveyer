@@ -14,7 +14,9 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import (
+    Button,
     Checkbox,
+    ContentSwitcher,
     Footer,
     Input,
     Label,
@@ -25,6 +27,7 @@ from textual.widgets import (
 
 from surveyer.config import VALID_LLM_PROVIDERS
 from surveyer.models import Ledger
+from surveyer.tui.concepts import ConceptsEditor
 from surveyer.tui.config_io import (
     TOGGLEABLE_SOURCES,
     FormValues,
@@ -53,6 +56,8 @@ class DashboardScreen(Screen):
     BINDINGS = [
         ("s", "save", "Save"),
         ("e", "edit", "Open in $EDITOR"),
+        ("c", "edit_concepts", "Concepts"),
+        ("ctrl+r", "reset_concepts", "Reset concepts"),
         ("r", "run", "Run"),
         ("f", "fetch", "Fetch only"),
         ("o", "open_output", "Open output"),
@@ -73,65 +78,76 @@ class DashboardScreen(Screen):
             self._doc = tomlkit.document()
             self._values = FormValues()
         self._pipeline_running = False
+        self._concepts_opened = False
 
     def compose(self) -> ComposeResult:
         """Build the form panel and the log pane."""
         v = self._values
         with Horizontal():
-            with VerticalScroll(id="form"):
-                yield Static("project", classes="section-title")
-                yield Label("Name")
-                yield Input(value=v.name, id="name")
-                yield Label("Output dir")
-                yield Input(value=v.output_dir, id="output_dir")
+            with ContentSwitcher(initial="form", id="left"):
+                with VerticalScroll(id="form"):
+                    yield Button("Edit concepts ▸", id="edit-concepts")
+                    yield Static("project", classes="section-title")
+                    yield Label("Name")
+                    yield Input(value=v.name, id="name")
+                    yield Label("Output dir")
+                    yield Input(value=v.output_dir, id="output_dir")
 
-                yield Static("search", classes="section-title")
-                yield Label("Sources")
-                for src in TOGGLEABLE_SOURCES:
-                    yield Checkbox(src, value=src in v.sources, id=f"src_{src}")
-                with Horizontal(classes="row"):
-                    with Vertical(classes="cell"):
-                        yield Label("Year min")
-                        yield Input(value=_opt_str(v.year_min), id="year_min")
-                    with Vertical(classes="cell"):
-                        yield Label("Year max")
-                        yield Input(value=_opt_str(v.year_max), id="year_max")
-                    with Vertical(classes="cell"):
-                        yield Label("Max results")
-                        yield Input(
-                            value=str(v.max_results_per_query), id="max_results"
-                        )
+                    yield Static("search", classes="section-title")
+                    yield Label("Sources")
+                    for src in TOGGLEABLE_SOURCES:
+                        yield Checkbox(src, value=src in v.sources, id=f"src_{src}")
+                    with Horizontal(classes="row"):
+                        with Vertical(classes="cell"):
+                            yield Label("Year min")
+                            yield Input(value=_opt_str(v.year_min), id="year_min")
+                        with Vertical(classes="cell"):
+                            yield Label("Year max")
+                            yield Input(value=_opt_str(v.year_max), id="year_max")
+                        with Vertical(classes="cell"):
+                            yield Label("Max results")
+                            yield Input(
+                                value=str(v.max_results_per_query), id="max_results"
+                            )
 
-                yield Static("filters", classes="section-title")
-                yield Label("Keyword exclude (comma-separated)")
-                yield Input(value=", ".join(v.exclude), id="exclude")
-                yield Checkbox(
-                    "LLM relevance filter", value=v.llm_enabled, id="llm_enabled"
+                    yield Static("filters", classes="section-title")
+                    yield Label("Keyword exclude (comma-separated)")
+                    yield Input(value=", ".join(v.exclude), id="exclude")
+                    yield Checkbox(
+                        "LLM relevance filter", value=v.llm_enabled, id="llm_enabled"
+                    )
+                    with Horizontal(classes="row"):
+                        with Vertical(classes="cell"):
+                            yield Label("Provider")
+                            yield Select(
+                                [(p, p) for p in sorted(VALID_LLM_PROVIDERS)],
+                                value=v.llm_provider
+                                if v.llm_provider in VALID_LLM_PROVIDERS
+                                else Select.NULL,
+                                allow_blank=True,
+                                id="llm_provider",
+                            )
+                        with Vertical(classes="cell"):
+                            yield Label("Model")
+                            yield Input(value=v.llm_model, id="llm_model")
+                        with Vertical(classes="cell"):
+                            yield Label("Threshold")
+                            yield Input(value=str(v.llm_threshold), id="llm_threshold")
+                    yield Label("Ollama host (used when provider = ollama)")
+                    yield Input(value=v.llm_host, id="llm_host")
+
+                    yield Static("extend", classes="section-title")
+                    yield Label("Screened xlsx (blank = off; needs xlsx export)")
+                    yield Input(value=v.extend_xlsx, id="extend_xlsx")
+                    yield Static(
+                        self._concepts_summary_text(
+                            v.search_concepts, v.filter_concepts
+                        ),
+                        id="concepts",
+                    )
+                yield ConceptsEditor(
+                    v.search_concepts, v.filter_concepts, id="concepts_editor"
                 )
-                with Horizontal(classes="row"):
-                    with Vertical(classes="cell"):
-                        yield Label("Provider")
-                        yield Select(
-                            [(p, p) for p in sorted(VALID_LLM_PROVIDERS)],
-                            value=v.llm_provider
-                            if v.llm_provider in VALID_LLM_PROVIDERS
-                            else Select.NULL,
-                            allow_blank=True,
-                            id="llm_provider",
-                        )
-                    with Vertical(classes="cell"):
-                        yield Label("Model")
-                        yield Input(value=v.llm_model, id="llm_model")
-                    with Vertical(classes="cell"):
-                        yield Label("Threshold")
-                        yield Input(value=str(v.llm_threshold), id="llm_threshold")
-                yield Label("Ollama host (used when provider = ollama)")
-                yield Input(value=v.llm_host, id="llm_host")
-
-                yield Static("extend", classes="section-title")
-                yield Label("Screened xlsx (blank = off; needs xlsx export)")
-                yield Input(value=v.extend_xlsx, id="extend_xlsx")
-                yield Static(self._concepts_summary(), id="concepts")
             yield RichLog(id="log", wrap=True)
         yield Footer()
 
@@ -146,20 +162,26 @@ class DashboardScreen(Screen):
                 "Press E to edit the file directly, or Q to quit."
             )
 
-    def _concepts_summary(self) -> str:
-        """Read-only summary of concept blocks (edit via $EDITOR)."""
-        lines = ["Concepts (read-only, press E to edit):"]
-        for section in ("search", "filter"):
-            table = self._doc.get(section)
-            concepts = table.get("concepts") if hasattr(table, "get") else None
-            if concepts:
+    @staticmethod
+    def _concepts_summary_text(search: list, filter_: list) -> str:
+        """Read-only one-line-per-section summary of the current concept blocks."""
+        lines = ["Concepts (press 'c' or the button to edit):"]
+        for label, items in (("search", search), ("filter", filter_)):
+            if items:
                 blocks = ", ".join(
-                    f"{k} ({len(v)} synonyms)" for k, v in concepts.items()
+                    f"{i.name} ({len(i.synonyms)} synonyms)" for i in items
                 )
-                lines.append(f"  [{section}.concepts] {blocks}")
+                lines.append(f"  [{label}.concepts] {blocks}")
         if len(lines) == 1:
             lines.append("  (none)")
         return "\n".join(lines)
+
+    def _refresh_concepts_summary(self) -> None:
+        """Update the read-only summary from the editor's live rows."""
+        editor = self.query_one(ConceptsEditor)
+        self.query_one("#concepts", Static).update(
+            self._concepts_summary_text(editor.read("search"), editor.read("filter"))
+        )
 
     def _collect(self) -> FormValues | None:
         """Read the widgets back into FormValues; log and return None on bad input."""
@@ -171,6 +193,13 @@ class DashboardScreen(Screen):
                 for s in TOGGLEABLE_SOURCES
                 if self.query_one(f"#src_{s}", Checkbox).value
             ]
+            if self._concepts_opened:
+                editor = self.query_one(ConceptsEditor)
+                search_concepts = editor.read("search")
+                filter_concepts = editor.read("filter")
+            else:
+                search_concepts = self._values.search_concepts
+                filter_concepts = self._values.filter_concepts
             return FormValues(
                 name=self.query_one("#name", Input).value,
                 output_dir=self.query_one("#output_dir", Input).value,
@@ -194,6 +223,8 @@ class DashboardScreen(Screen):
                 llm_host=self.query_one("#llm_host", Input).value,
                 llm_threshold=float(self.query_one("#llm_threshold", Input).value),
                 extend_xlsx=self.query_one("#extend_xlsx", Input).value,
+                search_concepts=search_concepts,
+                filter_concepts=filter_concepts,
             )
         except ValueError as exc:
             self._write_log(f"Invalid form value: {exc}")
@@ -250,10 +281,53 @@ class DashboardScreen(Screen):
                 self.app.notify(f"Config is now invalid: {error}", severity="warning")
         self.app.switch_screen(DashboardScreen(self._path))
 
-    def action_back(self) -> None:
-        """Leave the dashboard (back to the picker or the home screen)."""
+    def action_edit_concepts(self) -> None:
+        """Swap the left panel to the concepts editor."""
         if self._pipeline_running:
             self._write_log("A run is in progress - wait for it to finish.")
+            return
+        self._concepts_opened = True
+        self.query_one("#left", ContentSwitcher).current = "concepts_editor"
+
+    def action_reset_concepts(self) -> None:
+        """Reload concept blocks from the saved config, discarding unsaved edits."""
+        if self._pipeline_running:
+            self._write_log("A run is in progress - wait for it to finish.")
+            return
+        if self.query_one("#left", ContentSwitcher).current != "concepts_editor":
+            return
+        try:
+            values = extract_form(load_document(self._path))
+        except (OSError, ValueError, tomlkit.exceptions.ParseError) as exc:
+            self._write_log(f"Could not reload concepts: {exc}")
+            return
+        self.query_one(ConceptsEditor).reset(
+            values.search_concepts, values.filter_concepts
+        )
+        self.app.notify("Concepts reset to saved config.")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle the form's 'Edit concepts' button and the editor's nav buttons."""
+        if event.button.id == "edit-concepts":
+            self.action_edit_concepts()
+            event.stop()
+        elif event.button.id == "concepts-back":
+            self.query_one("#left", ContentSwitcher).current = "form"
+            self._refresh_concepts_summary()
+            event.stop()
+        elif event.button.id == "reset-concepts":
+            self.action_reset_concepts()
+            event.stop()
+
+    def action_back(self) -> None:
+        """From the editor, return to the form; from the form, leave the dashboard."""
+        if self._pipeline_running:
+            self._write_log("A run is in progress - wait for it to finish.")
+            return
+        switcher = self.query_one("#left", ContentSwitcher)
+        if switcher.current == "concepts_editor":
+            switcher.current = "form"
+            self._refresh_concepts_summary()
             return
         self.app.pop_screen()
 

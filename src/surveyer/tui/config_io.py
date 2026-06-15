@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import msgspec
 import tomlkit
@@ -30,6 +31,13 @@ _SEARCH_DEFAULTS = SearchConfig(sources=[], queries=[])
 _LLM_DEFAULTS = LLMConfig()
 
 
+class ConceptItem(msgspec.Struct, kw_only=True):
+    """One concept block: a name and its list of synonyms."""
+
+    name: str
+    synonyms: list[str]
+
+
 class FormValues(msgspec.Struct, kw_only=True):
     """The daily knobs the dashboard form owns."""
 
@@ -48,6 +56,8 @@ class FormValues(msgspec.Struct, kw_only=True):
     llm_host: str = msgspec.field(default=_LLM_DEFAULTS.host)
     llm_threshold: float = msgspec.field(default=_LLM_DEFAULTS.threshold)
     extend_xlsx: str = ""
+    search_concepts: list[ConceptItem] = []
+    filter_concepts: list[ConceptItem] = []
 
 
 def load_document(path: str | Path) -> TOMLDocument:
@@ -81,6 +91,31 @@ def _set_or_remove(table, key: str, value) -> None:
             del table[key]
         return
     _set(table, key, value)
+
+
+def _set_concepts(section_table, items: list[ConceptItem]) -> None:
+    """Write concept items into section_table['concepts'], or remove it if empty."""
+    desired = {item.name: list(item.synonyms) for item in items}
+    if not desired:
+        if "concepts" in section_table:
+            del section_table["concepts"]
+        return
+    table = _table(section_table, "concepts")
+    for key in list(table.keys()):
+        if key not in desired:
+            del table[key]
+    for key, synonyms in desired.items():
+        _set(table, key, synonyms)
+
+
+def _read_concepts(raw: Any) -> list[ConceptItem]:
+    """Convert a tomlkit concepts table into an ordered list of ConceptItem."""
+    if not raw:
+        return []
+    return [
+        ConceptItem(name=str(name), synonyms=[str(s) for s in synonyms])
+        for name, synonyms in raw.items()
+    ]
 
 
 def extract_form(doc: TOMLDocument) -> FormValues:
@@ -126,6 +161,8 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         llm_host=str(llm.get("host", _LLM_DEFAULTS.host)),
         llm_threshold=float(llm.get("threshold", _LLM_DEFAULTS.threshold)),
         extend_xlsx=str(extend.get("xlsx", "")) if extend else "",
+        search_concepts=_read_concepts(search.get("concepts")),
+        filter_concepts=_read_concepts(flt.get("concepts")),
     )
 
 
@@ -140,8 +177,10 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
     _set_or_remove(search, "year_min", values.year_min)
     _set_or_remove(search, "year_max", values.year_max)
     _set(search, "max_results_per_query", values.max_results_per_query)
+    _set_concepts(search, values.search_concepts)
 
     flt = _table(doc, "filter")
+    _set_concepts(flt, values.filter_concepts)
     keyword = _table(flt, "keyword")
     _set(keyword, "exclude", values.exclude)
     llm = _table(flt, "llm")
