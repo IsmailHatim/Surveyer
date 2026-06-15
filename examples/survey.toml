@@ -25,6 +25,9 @@ federated = ["federated learning", "federated averaging"]
 security  = ["secure aggregation", "model poisoning", "byzantine robust"]
 privacy   = ["differential privacy", "privacy preserving"]
 
+[dedup]
+title_threshold = 90 # rapidfuzz token-sort ratio (0-100) for fuzzy DOI-less title merges
+
 [filter.concepts]
 federated = ["federated learning", "federated averaging"]
 security  = ["secure aggregation", "model poisoning", "byzantine"]
