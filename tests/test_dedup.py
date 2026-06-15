@@ -28,6 +28,19 @@ def test_dedup_by_fuzzy_title_when_no_doi():
     assert removed == 1
 
 
+def test_dedup_threshold_controls_fuzzy_match():
+    # Two near-but-not-identical titles: a strict threshold keeps them apart,
+    # a looser one collapses them.
+    a = Record(title="Graph neural networks for traffic", sources=["dblp"])
+    b = Record(title="Graph neural networks for traffic forecasting", sources=["oa"])
+    strict, removed_strict = deduplicate([a, b], title_threshold=95)
+    assert len(strict) == 2 and removed_strict == 0
+    a2 = Record(title="Graph neural networks for traffic", sources=["dblp"])
+    b2 = Record(title="Graph neural networks for traffic forecasting", sources=["oa"])
+    loose, removed_loose = deduplicate([a2, b2], title_threshold=70)
+    assert len(loose) == 1 and removed_loose == 1
+
+
 def test_dedup_keeps_distinct():
     a = Record(title="Topic A", sources=["dblp"])
     b = Record(title="Completely Different Subject", sources=["openalex"])

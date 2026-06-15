@@ -107,6 +107,12 @@ class FilterConfig(msgspec.Struct, kw_only=True):
     llm: LLMConfig = msgspec.field(default_factory=LLMConfig)
 
 
+class DedupConfig(msgspec.Struct, kw_only=True):
+    """Deduplication configuration."""
+
+    title_threshold: int = 90
+
+
 class ExtendConfig(msgspec.Struct, kw_only=True):
     """Extend-mode configuration: build on a manually screened workbook."""
 
@@ -118,6 +124,7 @@ class SurveyConfig(msgspec.Struct, kw_only=True):
 
     project: ProjectConfig
     search: SearchConfig
+    dedup: DedupConfig = msgspec.field(default_factory=DedupConfig)
     filter: FilterConfig = msgspec.field(default_factory=FilterConfig)
     extend: ExtendConfig | None = None
 
@@ -155,6 +162,11 @@ def load_config(path: str | Path) -> SurveyConfig:
     unknown = set(cfg.search.sources) - VALID_SOURCES
     if unknown:
         raise ValueError(f"Unknown source(s): {', '.join(sorted(unknown))}")
+    if not 0 <= cfg.dedup.title_threshold <= 100:
+        raise ValueError(
+            f"dedup.title_threshold must be between 0 and 100, "
+            f"got {cfg.dedup.title_threshold}"
+        )
     _validate_concepts(cfg.search.concepts, "search.concepts")
     _validate_concepts(cfg.filter.concepts, "filter.concepts")
     if cfg.filter.concepts and cfg.filter.keyword.include:

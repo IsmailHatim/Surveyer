@@ -12,6 +12,7 @@ from tomlkit import TOMLDocument
 
 from surveyer.config import (
     VALID_SOURCES,
+    DedupConfig,
     LLMConfig,
     ProjectConfig,
     SearchConfig,
@@ -28,6 +29,7 @@ assert set(TOGGLEABLE_SOURCES) <= VALID_SOURCES, (
 # Sentinel instances used to derive canonical defaults
 _PROJECT_DEFAULTS = ProjectConfig(name="")
 _SEARCH_DEFAULTS = SearchConfig(sources=[], queries=[])
+_DEDUP_DEFAULTS = DedupConfig()
 _LLM_DEFAULTS = LLMConfig()
 
 
@@ -49,6 +51,7 @@ class FormValues(msgspec.Struct, kw_only=True):
     max_results_per_query: int = msgspec.field(
         default=_SEARCH_DEFAULTS.max_results_per_query
     )
+    dedup_title_threshold: int = msgspec.field(default=_DEDUP_DEFAULTS.title_threshold)
     exclude: list[str] = []
     llm_enabled: bool = msgspec.field(default=_LLM_DEFAULTS.enabled)
     llm_provider: str = msgspec.field(default=_LLM_DEFAULTS.provider)
@@ -133,6 +136,8 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         _expect_table(project, "project")
         search = doc.get("search", {})
         _expect_table(search, "search")
+        dedup = doc.get("dedup", {})
+        _expect_table(dedup, "dedup")
         flt = doc.get("filter", {})
         _expect_table(flt, "filter")
         keyword = flt.get("keyword", {}) if flt else {}
@@ -153,6 +158,9 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         year_max=search.get("year_max"),
         max_results_per_query=int(
             search.get("max_results_per_query", _SEARCH_DEFAULTS.max_results_per_query)
+        ),
+        dedup_title_threshold=int(
+            dedup.get("title_threshold", _DEDUP_DEFAULTS.title_threshold)
         ),
         exclude=[str(t) for t in keyword.get("exclude", [])],
         llm_enabled=bool(llm.get("enabled", _LLM_DEFAULTS.enabled)),
@@ -178,6 +186,13 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
     _set_or_remove(search, "year_max", values.year_max)
     _set(search, "max_results_per_query", values.max_results_per_query)
     _set_concepts(search, values.search_concepts)
+
+    if (
+        "dedup" in doc
+        or values.dedup_title_threshold != _DEDUP_DEFAULTS.title_threshold
+    ):
+        dedup = _table(doc, "dedup")
+        _set(dedup, "title_threshold", values.dedup_title_threshold)
 
     flt = _table(doc, "filter")
     _set_concepts(flt, values.filter_concepts)

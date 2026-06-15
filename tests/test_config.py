@@ -97,6 +97,29 @@ def test_unknown_provider_rejected(tmp_path):
         load_config(p)
 
 
+def test_dedup_threshold_defaults():
+    cfg = SurveyConfig(
+        project=ProjectConfig(name="demo"),
+        search=SearchConfig(sources=["dblp"], queries=[Query(label="A", terms="x")]),
+    )
+    assert cfg.dedup.title_threshold == 90
+
+
+def test_dedup_threshold_loaded(tmp_path):
+    p = tmp_path / "survey.toml"
+    p.write_text(SAMPLE + "\n[dedup]\ntitle_threshold = 85\n")
+    cfg = load_config(p)
+    assert cfg.dedup.title_threshold == 85
+
+
+@pytest.mark.parametrize("bad", [-1, 101, 200])
+def test_dedup_threshold_out_of_range_rejected(tmp_path, bad):
+    p = tmp_path / "survey.toml"
+    p.write_text(SAMPLE + f"\n[dedup]\ntitle_threshold = {bad}\n")
+    with pytest.raises(ValueError, match="title_threshold"):
+        load_config(p)
+
+
 def test_ollama_empty_host_rejected(tmp_path):
     p = tmp_path / "survey.toml"
     p.write_text(

@@ -77,7 +77,7 @@ def run_pipeline(
     ledger.failed_sources = failed
 
     # 2. Deduplicate
-    deduped, removed = deduplicate(records)
+    deduped, removed = deduplicate(records, title_threshold=cfg.dedup.title_threshold)
     ledger.duplicates_removed = removed
     log.info("dedup.done", removed=removed, remaining=len(deduped))
 

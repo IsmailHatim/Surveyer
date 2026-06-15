@@ -110,6 +110,12 @@ class DashboardScreen(Screen):
                                 value=str(v.max_results_per_query), id="max_results"
                             )
 
+                    yield Static("dedup", classes="section-title")
+                    yield Label("Fuzzy title threshold (0-100)")
+                    yield Input(
+                        value=str(v.dedup_title_threshold), id="dedup_title_threshold"
+                    )
+
                     yield Static("filters", classes="section-title")
                     yield Label("Keyword exclude (comma-separated)")
                     yield Input(value=", ".join(v.exclude), id="exclude")
@@ -214,6 +220,9 @@ class DashboardScreen(Screen):
                 year_min=_opt_int(self.query_one("#year_min", Input).value),
                 year_max=_opt_int(self.query_one("#year_max", Input).value),
                 max_results_per_query=int(self.query_one("#max_results", Input).value),
+                dedup_title_threshold=int(
+                    self.query_one("#dedup_title_threshold", Input).value
+                ),
                 exclude=[
                     t.strip()
                     for t in self.query_one("#exclude", Input).value.split(",")

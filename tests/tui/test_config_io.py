@@ -158,6 +158,33 @@ def test_sparse_config_defaults_are_correct(tmp_path: Path):
     assert cfg.project.output_dir == "runs/default"
 
 
+def test_dedup_threshold_extract_default_and_roundtrip():
+    """A config without [dedup] extracts the default and stays free of the table."""
+    doc = tomlkit.parse(SAMPLE)
+    v = extract_form(doc)
+    assert v.dedup_title_threshold == 90
+    apply_form(doc, v)
+    # noop save must not materialise an empty [dedup] table
+    assert "[dedup]" not in tomlkit.dumps(doc)
+
+
+def test_dedup_threshold_edit_materialises_section():
+    doc = tomlkit.parse(SAMPLE)
+    v = extract_form(doc)
+    v.dedup_title_threshold = 80
+    apply_form(doc, v)
+    dumped = tomlkit.dumps(doc)
+    assert "[dedup]" in dumped
+    assert "title_threshold = 80" in dumped
+    assert validate_text(dumped) is None
+    assert extract_form(tomlkit.parse(dumped)).dedup_title_threshold == 80
+
+
+def test_dedup_threshold_existing_section_read():
+    doc = tomlkit.parse(SAMPLE + "\n[dedup]\ntitle_threshold = 75\n")
+    assert extract_form(doc).dedup_title_threshold == 75
+
+
 def test_inline_table_llm_save_behaviour():
     """Inline-table configs pin graceful-failure contract."""
     inline_config = """\
