@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import threading
+
+import pytest
 from openpyxl import load_workbook
 
+from surveyer.cancel import PipelineCancelled
 from surveyer.config import (
     ExtendConfig,
     FilterConfig,
@@ -264,3 +268,41 @@ def test_extend_pipeline_resolves_bibtex_only_where_missing(tmp_path):
     assert "Relevant security paper" in resolved_titles
     assert "Old manually kept paper" not in resolved_titles
     assert all(r.bibtex for r in result.kept)
+
+
+def test_run_pipeline_cancel_before_work(tmp_path):
+    cfg = _cfg(tmp_path)
+    event = threading.Event()
+    event.set()
+    with pytest.raises(PipelineCancelled):
+        run_pipeline(
+            cfg,
+            registry={"fake": FakeSource()},
+            scorer=FakeScorer(),
+            resolve_bibtex=False,
+            cancel=event,
+        )
+    assert not (tmp_path / "ledger.json").exists()
+    assert not (tmp_path / "survey.xlsx").exists()
+    assert not (tmp_path / "prisma.svg").exists()
+
+
+def test_run_pipeline_cancel_during_llm(tmp_path):
+    event = threading.Event()
+
+    class CancelScorer:
+        def score(self, survey_abstract, record):
+            event.set()  # trip cancel as soon as the LLM stage starts
+            return 0.9, "ok"
+
+    cfg = _cfg(tmp_path)
+    with pytest.raises(PipelineCancelled):
+        run_pipeline(
+            cfg,
+            registry={"fake": FakeSource()},
+            scorer=CancelScorer(),
+            resolve_bibtex=False,
+            cancel=event,
+        )
+    assert not (tmp_path / "ledger.json").exists()
+    assert not (tmp_path / "survey.xlsx").exists()

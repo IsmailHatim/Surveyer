@@ -188,6 +188,26 @@ async def test_run_reports_pipeline_error(config_file, monkeypatch):
     assert "network down" in log_lines
 
 
+async def test_escape_cancels_running_run(config_file):
+    """Pressing Esc during a run sets the cancel event without leaving the screen."""
+    import threading
+
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        # Simulate an in-flight run: pretend the worker is running with a cancel event.
+        screen._pipeline_running = True
+        screen._cancel = threading.Event()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert screen._cancel is not None
+        assert screen._cancel.is_set()
+        # The run must still be marked running and the screen must not have popped.
+        assert screen._pipeline_running is True
+        assert app.screen is screen
+
+
 SEED_CONFIG = """\
 [project]
 name = "seed-survey"

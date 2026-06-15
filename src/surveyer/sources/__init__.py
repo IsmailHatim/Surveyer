@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import structlog
 
+from surveyer.cancel import check_cancelled
 from surveyer.config import SearchConfig
 from surveyer.models import Record
 from surveyer.sources.agent import AgentSource
@@ -69,7 +71,10 @@ def build_registry(
 
 
 def fetch_all(
-    search: SearchConfig, registry: dict[str, Source]
+    search: SearchConfig,
+    registry: dict[str, Source],
+    *,
+    cancel: threading.Event | None = None,
 ) -> tuple[list[Record], dict[str, int], list[str]]:
     """Run every (source, query) pair, tagging provenance.
 
@@ -83,6 +88,7 @@ def fetch_all(
         n = 0
         had_error = False
         for query in queries:
+            check_cancelled(cancel)
             try:
                 hits = source.search(
                     query.terms, max_results=search.max_results_per_query

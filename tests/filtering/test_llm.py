@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 
+from surveyer.cancel import PipelineCancelled
 from surveyer.config import LLMConfig
 from surveyer.filtering.llm import apply_llm_filter
 from surveyer.models import Record
@@ -82,7 +85,7 @@ def test_unscored_records_kept_on_scorer_error():
     assert len(kept) == 1
     assert excluded == 0
     assert kept[0].llm_score is None
-    assert kept[0].llm_reason == "scoring failed — review manually"
+    assert kept[0].llm_reason == "scoring failed - review manually"
 
 
 def test_caching_scorer_avoids_recompute(tmp_path):
@@ -174,3 +177,38 @@ def test_build_scorer_unknown_provider():
     cfg = LLMConfig(enabled=True, provider="bogus")
     with pytest.raises(ValueError, match="provider"):
         build_scorer(cfg)
+
+
+def test_apply_llm_filter_cancel_before_any_record():
+    cfg = LLMConfig(enabled=True, threshold=0.5, survey_abstract="s")
+    scorer = FakeScorer()
+    event = threading.Event()
+    event.set()
+    with pytest.raises(PipelineCancelled):
+        apply_llm_filter([Record(title="x", abstract="relevant")], cfg, scorer,
+                          cancel=event)
+    assert scorer.calls == 0
+
+
+def test_apply_llm_filter_cancel_after_n_records():
+    event = threading.Event()
+
+    class CancelOnNth:
+        """Scores normally but trips the event once N records are scored."""
+
+        def __init__(self, n):
+            self.calls = 0
+            self.n = n
+
+        def score(self, survey_abstract, record):
+            self.calls += 1
+            if self.calls >= self.n:
+                event.set()
+            return 0.9, "ok"
+
+    cfg = LLMConfig(enabled=True, threshold=0.5, survey_abstract="s")
+    recs = [Record(title=f"r{i}", abstract="relevant") for i in range(5)]
+    scorer = CancelOnNth(2)
+    with pytest.raises(PipelineCancelled):
+        apply_llm_filter(recs, cfg, scorer, cancel=event)
+    assert scorer.calls == 2
