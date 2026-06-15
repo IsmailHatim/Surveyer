@@ -9,6 +9,9 @@ from surveyer.sources.base import HttpClient
 
 API = "https://api.openalex.org/works"
 
+# OpenAlex caps `per-page` at 200 records per request.
+PAGE_SIZE = 200
+
 
 def reconstruct_abstract(inverted: dict | None) -> str | None:
     """Rebuild plain text from OpenAlex's abstract_inverted_index."""
@@ -66,14 +69,24 @@ class OpenAlexSource:
         self.year_max = year_max
 
     def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search OpenAlex and return records."""
-        params: dict = {"search": terms, "per-page": min(max_results, 200)}
+        """Search OpenAlex, paginating until max_results is reached."""
+        per_page = min(max_results, PAGE_SIZE)
         filters = []
         if self.year_min:
             filters.append(f"from_publication_date:{self.year_min}-01-01")
         if self.year_max:
             filters.append(f"to_publication_date:{self.year_max}-12-31")
-        if filters:
-            params["filter"] = ",".join(filters)
-        raw = self.client.get_json(API, params=params)
-        return parse_openalex(raw)
+
+        out: list[Record] = []
+        page = 1
+        while len(out) < max_results:
+            params: dict = {"search": terms, "per-page": per_page, "page": page}
+            if filters:
+                params["filter"] = ",".join(filters)
+            raw = self.client.get_json(API, params=params)
+            batch = parse_openalex(raw)
+            out.extend(batch)
+            if len(batch) < per_page:
+                break
+            page += 1
+        return out[:max_results]

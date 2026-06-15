@@ -10,6 +10,9 @@ from surveyer.sources.base import HttpClient
 API = "https://api.semanticscholar.org/graph/v1/paper/search"
 FIELDS = "title,abstract,year,citationCount,externalIds,venue,url,authors"
 
+# The search endpoint caps `limit` at 100 records per request.
+PAGE_SIZE = 100
+
 
 def parse_s2(raw: dict) -> list[Record]:
     """Parse a Semantic Scholar API response into a list of Records."""
@@ -42,10 +45,25 @@ class SemanticScholarSource:
         self.client = client
 
     def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search Semantic Scholar and return records."""
-        params = {"query": terms, "limit": min(max_results, 100), "fields": FIELDS}
-        raw = self.client.get_json(API, params=params)
-        return parse_s2(raw)
+        """Search Semantic Scholar, paginating until max_results is reached."""
+        out: list[Record] = []
+        offset = 0
+        while len(out) < max_results:
+            limit = min(max_results - len(out), PAGE_SIZE)
+            params = {
+                "query": terms,
+                "offset": offset,
+                "limit": limit,
+                "fields": FIELDS,
+            }
+            raw = self.client.get_json(API, params=params)
+            batch = parse_s2(raw)
+            out.extend(batch)
+            nxt = raw.get("next")
+            if not batch or nxt is None:
+                break
+            offset = nxt
+        return out[:max_results]
 
 
 def make_headers() -> dict[str, str]:
