@@ -82,6 +82,7 @@ def test_unscored_records_kept_on_scorer_error():
     assert len(kept) == 1
     assert excluded == 0
     assert kept[0].llm_score is None
+    assert kept[0].llm_reason == "scoring failed — review manually"
 
 
 def test_caching_scorer_avoids_recompute(tmp_path):

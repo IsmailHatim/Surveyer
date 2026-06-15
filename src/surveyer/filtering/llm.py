@@ -161,6 +161,7 @@ def apply_llm_filter(
         except Exception as exc:
             log.warning("llm.score_failed", title=r.title, error=str(exc))
             r.llm_score = None
+            r.llm_reason = "scoring failed — review manually"
             kept.append(r)  # not scored records are kept for manual review
             continue
         r.llm_score = value
