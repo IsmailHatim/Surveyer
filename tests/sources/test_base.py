@@ -139,6 +139,52 @@ def test_http_client_honors_retry_after_over_backoff(tmp_path, monkeypatch):
     assert waits == [7.0]
 
 
+def test_http_client_honors_retry_after_http_date(tmp_path, monkeypatch):
+    # Crossref and others send the HTTP-date form of Retry-After, not seconds.
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    waits: list[float] = []
+    monkeypatch.setattr("surveyer.sources.base.time.sleep", waits.append)
+    date_str = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=30))
+    seq = [503, 200]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        code = seq.pop(0)
+        headers = {"Retry-After": date_str} if code == 503 else {}
+        return httpx.Response(code, json={"ok": True}, headers=headers)
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=4, backoff=1.0
+    )
+
+    assert client.get_json("https://example.test/rad", params={}) == {"ok": True}
+    # ~30s out; allow a wide band for clock movement during the test.
+    assert len(waits) == 1
+    assert 25.0 <= waits[0] <= 31.0
+
+
+def test_http_client_retry_after_garbage_falls_back_to_backoff(tmp_path, monkeypatch):
+    # An unparseable Retry-After must not crash; fall through to backoff.
+    waits: list[float] = []
+    monkeypatch.setattr("surveyer.sources.base.time.sleep", waits.append)
+    seq = [429, 200]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        code = seq.pop(0)
+        headers = {"Retry-After": "soon-ish"} if code == 429 else {}
+        return httpx.Response(code, json={"ok": True}, headers=headers)
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(
+        cache_dir=tmp_path, transport=transport, max_retries=4, backoff=1.0
+    )
+
+    assert client.get_json("https://example.test/rag", params={}) == {"ok": True}
+    assert waits == [1.0]  # backoff for attempt 1, not a crash
+
+
 def test_http_client_retries_on_transport_error(tmp_path):
     # DBLP drops connections under load; a transient ReadTimeout/reset must retry,
     # not kill the whole query.

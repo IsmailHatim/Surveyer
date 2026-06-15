@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -14,6 +16,26 @@ import structlog
 from surveyer.models import Record
 
 log = structlog.get_logger()
+
+
+def _parse_retry_after(value: str) -> float | None:
+    """Parse a Retry-After header (delta-seconds or HTTP-date) to seconds.
+
+    Returns None if the value is neither a non-negative integer nor a valid
+    HTTP-date, so the caller can fall back to exponential backoff.
+    """
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return max(0.0, (when - datetime.now(UTC)).total_seconds())
 
 
 class Source(Protocol):
@@ -60,8 +82,10 @@ class HttpClient:
 
     def _retry_wait(self, attempt: int, retry_after: str | None = None) -> float:
         """Exponential backoff, capped, with the server's Retry-After winning."""
-        if retry_after and retry_after.isdigit():
-            return float(retry_after)
+        if retry_after:
+            seconds = _parse_retry_after(retry_after)
+            if seconds is not None:
+                return seconds
         return min(self.backoff * (2 ** (attempt - 1)), self.max_backoff)
 
     def _cache_path(
