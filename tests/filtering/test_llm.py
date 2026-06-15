@@ -136,13 +136,24 @@ def test_ollama_scorer_raises_on_missing_score(mocker):
         scorer.score("survey", Record(title="T", abstract="A"))
 
 
-def test_build_scorer_openai(mocker):
+def test_build_scorer_openai(mocker, monkeypatch):
     from surveyer.filtering.llm import OpenAIScorer, build_scorer
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     mocker.patch("openai.OpenAI")
     cfg = LLMConfig(enabled=True, provider="openai", model="gpt-4o-mini")
     scorer = build_scorer(cfg)
     assert isinstance(scorer, OpenAIScorer)
+
+
+def test_openai_scorer_fails_fast_without_api_key(mocker, monkeypatch):
+    from surveyer.filtering.llm import OpenAIScorer
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    open_ai = mocker.patch("openai.OpenAI")
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        OpenAIScorer()
+    open_ai.assert_not_called()
 
 
 def test_build_scorer_ollama(mocker):

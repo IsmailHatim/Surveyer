@@ -59,6 +59,15 @@ def run_pipeline(
             excluded=len(baseline.excluded),
         )
 
+    if cfg.filter.llm.enabled and scorer is None:
+        from surveyer.filtering.llm import CachingScorer
+
+        scorer = CachingScorer(
+            build_scorer(cfg.filter.llm),
+            cache_root / "llm",
+            namespace=f"{cfg.filter.llm.provider}:{cfg.filter.llm.model}",
+        )
+
     if registry is None:
         registry = build_registry(cfg.search, cache_root)
 
@@ -90,16 +99,8 @@ def run_pipeline(
     kept_kw_ids = {id(r) for r in after_kw}
     dropped: list[Record] = [r for r in deduped if id(r) not in kept_kw_ids]
 
-    # 4. LLM filter
-    if cfg.filter.llm.enabled:
-        if scorer is None:
-            from surveyer.filtering.llm import CachingScorer
-
-            scorer = CachingScorer(
-                build_scorer(cfg.filter.llm),
-                cache_root / "llm",
-                namespace=f"{cfg.filter.llm.provider}:{cfg.filter.llm.model}",
-            )
+    # 4. LLM filter (scorer was built up front, before fetching)
+    if cfg.filter.llm.enabled and scorer is not None:
         after_llm, excluded_llm = apply_llm_filter(after_kw, cfg.filter.llm, scorer)
     else:
         after_llm, excluded_llm = after_kw, 0

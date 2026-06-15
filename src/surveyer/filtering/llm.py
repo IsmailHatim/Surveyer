@@ -36,10 +36,17 @@ class OpenAIScorer:
 
     def __init__(self, model: str = "gpt-4o-mini") -> None:
         """Initialise the scorer with the given OpenAI model name."""
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set; the OpenAI scorer cannot run. "
+                "Set it in the environment (or via `uv run --env-file .env ...`)."
+            )
+
         from openai import OpenAI
 
         self.model = model
-        self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        self.client = OpenAI(api_key=api_key)
 
     def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
         """Score a record against the survey abstract via the OpenAI chat API."""
