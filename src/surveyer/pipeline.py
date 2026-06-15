@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import msgspec
 import structlog
 
+from surveyer.cancel import check_cancelled
 from surveyer.config import SurveyConfig
 from surveyer.dedup import deduplicate
 from surveyer.export import export_extended, export_results
@@ -41,6 +43,7 @@ def run_pipeline(
     resolver: BibtexResolver | None = None,
     resolve_bibtex: bool = True,
     refresh: bool = False,
+    cancel: threading.Event | None = None,
 ) -> PipelineResult:
     """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma."""
     out_dir = Path(cfg.project.output_dir)
@@ -70,7 +73,7 @@ def run_pipeline(
         registry = build_registry(cfg.search, cache_root, refresh=refresh)
 
     # 1. Fetch
-    records, counts, failed = fetch_all(cfg.search, registry)
+    records, counts, failed = fetch_all(cfg.search, registry, cancel=cancel)
     ledger = Ledger(
         identified=[SourceCount(source=s, count=n) for s, n in counts.items()]
     )
@@ -80,6 +83,7 @@ def run_pipeline(
     deduped, removed = deduplicate(records, title_threshold=cfg.dedup.title_threshold)
     ledger.duplicates_removed = removed
     log.info("dedup.done", removed=removed, remaining=len(deduped))
+    check_cancelled(cancel)
 
     # 2bis. Drop records already screened in the baseline workbook.
     if baseline is not None:
@@ -99,7 +103,9 @@ def run_pipeline(
 
     # 4. LLM filter (scorer was built up front, before fetching)
     if cfg.filter.llm.enabled and scorer is not None:
-        after_llm, excluded_llm = apply_llm_filter(after_kw, cfg.filter.llm, scorer)
+        after_llm, excluded_llm = apply_llm_filter(
+            after_kw, cfg.filter.llm, scorer, cancel=cancel
+        )
     else:
         after_llm, excluded_llm = after_kw, 0
     ledger.excluded_llm = excluded_llm
@@ -107,6 +113,8 @@ def run_pipeline(
     dropped.extend(r for r in after_kw if id(r) not in kept_llm_ids)
 
     ledger.included = len(after_llm)
+
+    check_cancelled(cancel)
 
     # 4bis Resolve BibTeX for kept records (DBLP key -> DOI -> local fallback).
     if resolve_bibtex:

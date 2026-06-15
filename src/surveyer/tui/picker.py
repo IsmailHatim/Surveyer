@@ -85,7 +85,7 @@ class PickerScreen(Screen):
 
     def on_mount(self) -> None:
         """Title the picker box."""
-        self.query_one("#picker-box").border_title = "surveyer — choose a survey"
+        self.query_one("#picker-box").border_title = "surveyer - choose a survey"
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Open the selected config in the dashboard."""

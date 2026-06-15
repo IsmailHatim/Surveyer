@@ -6,6 +6,7 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import tomlkit
@@ -61,7 +62,7 @@ class DashboardScreen(Screen):
         ("r", "run", "Run"),
         ("f", "fetch", "Fetch only"),
         ("o", "open_output", "Open output"),
-        ("escape", "back", "Back"),
+        ("escape", "back", "Back / cancel"),
         ("q", "app.quit", "Quit"),
     ]
 
@@ -78,6 +79,7 @@ class DashboardScreen(Screen):
             self._doc = tomlkit.document()
             self._values = FormValues()
         self._pipeline_running = False
+        self._cancel: threading.Event | None = None
         self._concepts_opened = False
 
     def compose(self) -> ComposeResult:
@@ -154,7 +156,7 @@ class DashboardScreen(Screen):
 
                     yield Static("run", classes="section-title")
                     yield Checkbox(
-                        "Refresh — bypass HTTP cache, refetch from sources",
+                        "Refresh - bypass HTTP cache, refetch from sources",
                         value=False,
                         id="refresh",
                     )
@@ -336,9 +338,11 @@ class DashboardScreen(Screen):
             event.stop()
 
     def action_back(self) -> None:
-        """From the editor, return to the form; from the form, leave the dashboard."""
+        """Cancel a running pipeline; otherwise return to the form or leave."""
         if self._pipeline_running:
-            self._write_log("A run is in progress - wait for it to finish.")
+            if self._cancel is not None and not self._cancel.is_set():
+                self._cancel.set()
+                self._write_log("Cancelling - will stop at the next checkpoint…")
             return
         switcher = self.query_one("#left", ContentSwitcher)
         if switcher.current == "concepts_editor":
@@ -377,21 +381,27 @@ class DashboardScreen(Screen):
             self._write_log("A run is already in progress.")
             return
         self._pipeline_running = True
+        cancel = self._cancel = threading.Event()
         refresh = self.query_one("#refresh", Checkbox).value
         mode = "fetch-only" if fetch_only else "full pipeline"
         if refresh:
             mode += " (refresh)"
         self.query_one("#log", RichLog).border_title = f"run log - {mode} running…"
-        self._write_log(f"Starting {mode} run...")
+        self._write_log(f"Starting {mode} run... (press Esc to cancel)")
         self.run_worker(
-            lambda: self._pipeline_worker(fetch_only=fetch_only, refresh=refresh),
+            lambda: self._pipeline_worker(
+                fetch_only=fetch_only, refresh=refresh, cancel=cancel
+            ),
             thread=True,
             exclusive=True,
         )
 
-    def _pipeline_worker(self, *, fetch_only: bool, refresh: bool = False) -> None:
+    def _pipeline_worker(
+        self, *, fetch_only: bool, refresh: bool = False, cancel: threading.Event
+    ) -> None:
         """Worker body: run the pipeline, streaming structlog events to the pane."""
         import surveyer.pipeline as pipeline
+        from surveyer.cancel import PipelineCancelled
         from surveyer.config import disable_filters, load_config
         from surveyer.tui.progress import forward_logs
 
@@ -404,7 +414,10 @@ class DashboardScreen(Screen):
                 disable_filters(cfg)
             with forward_logs(write):
                 result = pipeline.run_pipeline(
-                    cfg, resolve_bibtex=not fetch_only, refresh=refresh
+                    cfg,
+                    resolve_bibtex=not fetch_only,
+                    refresh=refresh,
+                    cancel=cancel,
                 )
             led = result.ledger
             if fetch_only:
@@ -432,6 +445,8 @@ class DashboardScreen(Screen):
             )
             if led.failed_sources:
                 write("Warning: sources errored: " + ", ".join(led.failed_sources))
+        except PipelineCancelled:
+            write("Run cancelled - no outputs written.")
         except Exception as exc:
             write(f"ERROR: {exc}")
         finally:
@@ -465,4 +480,5 @@ class DashboardScreen(Screen):
     def _finish_run(self) -> None:
         """Mark the run as finished (re-enables run/save/edit)."""
         self._pipeline_running = False
+        self._cancel = None
         self.query_one("#log", RichLog).border_title = "run log"

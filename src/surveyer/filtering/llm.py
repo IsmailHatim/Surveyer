@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Protocol
 
 import structlog
 
+from surveyer.cancel import check_cancelled
 from surveyer.config import LLMConfig
 from surveyer.models import Record
 
@@ -153,7 +155,11 @@ class CachingScorer:
 
 
 def apply_llm_filter(
-    records: list[Record], cfg: LLMConfig, scorer: Scorer
+    records: list[Record],
+    cfg: LLMConfig,
+    scorer: Scorer,
+    *,
+    cancel: threading.Event | None = None,
 ) -> tuple[list[Record], int]:
     """Score each record; keep those above threshold. Returns (kept, excluded)."""
     if not cfg.enabled:
@@ -162,13 +168,14 @@ def apply_llm_filter(
     total = len(records)
     kept: list[Record] = []
     for i, r in enumerate(records, start=1):
+        check_cancelled(cancel)
         log.info("llm.scoring", done=i, total=total, title=r.title)
         try:
             value, reason = scorer.score(cfg.survey_abstract, r)
         except Exception as exc:
             log.warning("llm.score_failed", title=r.title, error=str(exc))
             r.llm_score = None
-            r.llm_reason = "scoring failed — review manually"
+            r.llm_reason = "scoring failed - review manually"
             kept.append(r)  # not scored records are kept for manual review
             continue
         r.llm_score = value
