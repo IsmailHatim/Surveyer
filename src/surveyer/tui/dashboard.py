@@ -373,7 +373,7 @@ class DashboardScreen(Screen):
     def _pipeline_worker(self, *, fetch_only: bool) -> None:
         """Worker body: run the pipeline, streaming structlog events to the pane."""
         import surveyer.pipeline as pipeline
-        from surveyer.config import load_config
+        from surveyer.config import disable_filters, load_config
         from surveyer.tui.progress import forward_logs
 
         def write(line: str) -> None:
@@ -382,9 +382,7 @@ class DashboardScreen(Screen):
         try:
             cfg = load_config(self._path)
             if fetch_only:
-                cfg.filter.keyword.include = []
-                cfg.filter.keyword.exclude = []
-                cfg.filter.llm.enabled = False
+                disable_filters(cfg)
             with forward_logs(write):
                 result = pipeline.run_pipeline(cfg, resolve_bibtex=not fetch_only)
             led = result.ledger

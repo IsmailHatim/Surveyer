@@ -36,6 +36,11 @@ def _merge(into: Record, other: Record) -> None:
     for field in ("doi", "abstract", "venue", "year", "url", "n_citations", "dblp_key"):
         if getattr(into, field) is None and getattr(other, field) is not None:
             setattr(into, field, getattr(other, field))
+    # Backfill an empty author list and union keywords across sources.
+    if not into.authors and other.authors:
+        into.authors = list(other.authors)
+    if other.keywords:
+        into.keywords = sorted(set(into.keywords) | set(other.keywords))
 
 
 def deduplicate(
@@ -55,22 +60,24 @@ def deduplicate(
 
         norm = normalize_title(r.title)
         match = None
-        for existing in kept:
-            ex_doi = existing.doi.lower().strip() if existing.doi else None
-            # Conflicting DOIs block a merge unless one side is a preprint
-            if (
-                doi
-                and ex_doi
-                and ex_doi != doi
-                and not (_is_weak_doi(doi) or _is_weak_doi(ex_doi))
-            ):
-                continue
-            if (
-                fuzz.token_sort_ratio(norm, normalize_title(existing.title))
-                >= title_threshold
-            ):
-                match = existing
-                break
+        # Skip fuzzy matching for empty normalized titles
+        if norm:
+            for existing in kept:
+                ex_doi = existing.doi.lower().strip() if existing.doi else None
+                # Conflicting DOIs block a merge unless one side is a preprint
+                if (
+                    doi
+                    and ex_doi
+                    and ex_doi != doi
+                    and not (_is_weak_doi(doi) or _is_weak_doi(ex_doi))
+                ):
+                    continue
+                if (
+                    fuzz.token_sort_ratio(norm, normalize_title(existing.title))
+                    >= title_threshold
+                ):
+                    match = existing
+                    break
 
         if match is not None:
             _merge(match, r)

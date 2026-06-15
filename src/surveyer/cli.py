@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from surveyer.config import load_config
+from surveyer.config import disable_filters, load_config
 from surveyer.pipeline import run_pipeline
 
 app = typer.Typer(add_completion=False, help="Reproducible survey literature search.")
@@ -66,10 +66,7 @@ def run(
 def fetch(config: str = typer.Option(..., "--config", "-c")) -> None:
     """Fetch, deduplication and export the raw record set."""
     cfg = load_config(config)
-    # No Filtering
-    cfg.filter.keyword.include = []
-    cfg.filter.keyword.exclude = []
-    cfg.filter.llm.enabled = False
+    disable_filters(cfg)
     result = run_pipeline(cfg, resolve_bibtex=False)
     typer.echo(
         f"Fetched and deduplicated: {result.ledger.after_dedup()} records "

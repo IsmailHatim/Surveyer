@@ -122,6 +122,14 @@ class SurveyConfig(msgspec.Struct, kw_only=True):
     extend: ExtendConfig | None = None
 
 
+def disable_filters(cfg: SurveyConfig) -> None:
+    """Strip every screening filter for fetch-only mode."""
+    cfg.filter.concepts = None
+    cfg.filter.keyword.include = []
+    cfg.filter.keyword.exclude = []
+    cfg.filter.llm.enabled = False
+
+
 def _validate_concepts(concepts: dict[str, list[str]] | None, where: str) -> None:
     """Reject empty synonym lists or blank synonyms, naming the location."""
     if concepts is None:
