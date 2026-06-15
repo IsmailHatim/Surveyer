@@ -299,3 +299,39 @@ def test_export_extended_backfills_bibtex_with_padded_title(tmp_path):
     header2 = [c.value for c in ws2[1]]
     bib_col = header2.index("bibtex") + 1
     assert ws2.cell(row=2, column=bib_col).value == "@misc{hand}"
+
+
+def test_export_extended_backfills_bibtex_by_doi_after_title_edit(tmp_path):
+    """A manually edited title still backfills bibtex when the DOI matches."""
+    baseline = tmp_path / "v1.xlsx"
+    export_xlsx(
+        [Record(title="Original title", doi="10.1/x")],
+        [],
+        Ledger(included=1),
+        baseline,
+    )
+    # The reviewer rewords the title in the screened workbook; the DOI stays.
+    wb = load_workbook(baseline)
+    ws = wb["papers"]
+    header = [c.value for c in ws[1]]
+    title_col = header.index("title") + 1
+    ws.cell(row=2, column=title_col).value = "A Better, Edited Title"
+    wb.save(baseline)
+
+    resolved = Record(
+        title="Original title",
+        doi="10.1/x",
+        bibtex="@article{x}",
+        bibtex_source="dblp",
+    )
+    out = tmp_path / "v2" / "survey.xlsx"
+    export_extended_xlsx(
+        baseline, [resolved], [], [], Ledger(included=0, previously_included=1), out
+    )
+
+    ws2 = load_workbook(out)["papers"]
+    header2 = [c.value for c in ws2[1]]
+    bib_col = header2.index("bibtex") + 1
+    src_col = header2.index("bibtex_source") + 1
+    assert ws2.cell(row=2, column=bib_col).value == "@article{x}"
+    assert ws2.cell(row=2, column=src_col).value == "dblp"

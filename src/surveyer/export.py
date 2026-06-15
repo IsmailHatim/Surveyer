@@ -11,6 +11,7 @@ import polars as pl
 import xlsxwriter
 from openpyxl import load_workbook
 
+from surveyer.dedup import normalize_title
 from surveyer.models import Ledger, Record
 
 if TYPE_CHECKING:
@@ -249,23 +250,45 @@ def _rewrite_summary(wb, ledger: Ledger) -> None:
 
 
 def _patch_missing_bibtex(ws, records: list[Record]) -> None:
-    """Backfill bibtex bibtex_source cells that are empty in existing rows."""
+    """Backfill empty bibtex/bibtex_source cells, matching by DOI then title.
+
+    DOI is preferred because the extend workflow lets reviewers hand-edit titles
+    in the screened workbook; a normalized-title match is the fallback.
+    """
     header = [cell.value for cell in ws[1]]
     if "bibtex" not in header or "title" not in header:
         return
     title_col = header.index("title") + 1
     bib_col = header.index("bibtex") + 1
     src_col = header.index("bibtex_source") + 1 if "bibtex_source" in header else None
+    doi_col = header.index("doi") + 1 if "doi" in header else None
 
-    resolved = {r.title.strip(): r for r in records if r.bibtex}
+    # Index resolved records by normalized DOI (preferred) and normalized title.
+    by_doi: dict[str, Record] = {}
+    by_title: dict[str, Record] = {}
+    for r in records:
+        if not r.bibtex:
+            continue
+        if r.doi and r.doi.strip():
+            by_doi.setdefault(r.doi.lower().strip(), r)
+        norm = normalize_title(r.title)
+        if norm:
+            by_title.setdefault(norm, r)
+
     for row in ws.iter_rows(min_row=2):
-        title_cell = row[title_col - 1]
         bib_cell = row[bib_col - 1]
         if bib_cell.value:
             continue
-        record = resolved.get(
-            str(title_cell.value).strip() if title_cell.value is not None else ""
-        )
+        record = None
+        if doi_col is not None:
+            doi_val = row[doi_col - 1].value
+            if doi_val is not None and str(doi_val).strip():
+                record = by_doi.get(str(doi_val).lower().strip())
+        if record is None:
+            title_val = row[title_col - 1].value
+            norm = normalize_title(str(title_val)) if title_val is not None else ""
+            if norm:
+                record = by_title.get(norm)
         if record is None:
             continue
         bib_cell.value = record.bibtex
