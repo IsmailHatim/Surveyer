@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import threading
+
+import pytest
 import structlog
 
+from surveyer.cancel import PipelineCancelled
 from surveyer.config import Query, SearchConfig
 from surveyer.models import Record
 from surveyer.sources import build_registry, fetch_all
@@ -111,3 +115,42 @@ def test_fetch_all_warns_once_across_sources():
         fetch_all(search, registry)
     warnings = [e for e in logs if e["event"] == "concepts.explosion"]
     assert len(warnings) == 1
+
+
+def test_fetch_all_cancel_before_search():
+    class BoomSource:
+        name = "boom"
+
+        def search(self, terms, *, max_results):
+            raise AssertionError("search must not run when already cancelled")
+
+    search = SearchConfig(sources=["boom"], queries=[Query(label="A", terms="x")])
+    event = threading.Event()
+    event.set()
+    with pytest.raises(PipelineCancelled):
+        fetch_all(search, {"boom": BoomSource()}, cancel=event)
+
+
+def test_fetch_all_cancel_mid_loop():
+    event = threading.Event()
+
+    class CancelAfterFirst:
+        name = "src"
+
+        def __init__(self):
+            self.calls = 0
+
+        def search(self, terms, *, max_results):
+            self.calls += 1
+            event.set()  # trip cancel after the first query returns
+            return [Record(title="hit")]
+
+    search = SearchConfig(
+        sources=["src"],
+        queries=[Query(label="A", terms="x"), Query(label="B", terms="y")],
+    )
+    source = CancelAfterFirst()
+    with pytest.raises(PipelineCancelled):
+        fetch_all(search, {"src": source}, cancel=event)
+    # First query ran; the check at the top of the 2nd iteration raised.
+    assert source.calls == 1
