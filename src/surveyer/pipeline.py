@@ -40,11 +40,9 @@ def run_pipeline(
     scorer: Scorer | None = None,
     resolver: BibtexResolver | None = None,
     resolve_bibtex: bool = True,
+    refresh: bool = False,
 ) -> PipelineResult:
-    """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma.
-
-    When extending a baseline, only the new records are filtered.
-    """
+    """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma."""
     out_dir = Path(cfg.project.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_root = out_dir / "cache"
@@ -69,7 +67,7 @@ def run_pipeline(
         )
 
     if registry is None:
-        registry = build_registry(cfg.search, cache_root)
+        registry = build_registry(cfg.search, cache_root, refresh=refresh)
 
     # 1. Fetch
     records, counts, failed = fetch_all(cfg.search, registry)
@@ -115,7 +113,7 @@ def run_pipeline(
         if resolver is None:
             from surveyer.bibtex import build_resolver
 
-            resolver = build_resolver(cache_root)
+            resolver = build_resolver(cache_root, refresh=refresh)
         if baseline is None:
             resolver.resolve_all(after_llm)
         else:

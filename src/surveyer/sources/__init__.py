@@ -18,7 +18,9 @@ from surveyer.sources.semantic_scholar import SemanticScholarSource, make_header
 log = structlog.get_logger()
 
 
-def build_registry(search: SearchConfig, cache_root: str | Path) -> dict[str, Source]:
+def build_registry(
+    search: SearchConfig, cache_root: str | Path, *, refresh: bool = False
+) -> dict[str, Source]:
     """Instantiate the adapters named in the config."""
     cache = Path(cache_root)
     registry: dict[str, Source] = {}
@@ -28,11 +30,18 @@ def build_registry(search: SearchConfig, cache_root: str | Path) -> dict[str, So
                 # DBLP throttles hard and signals it inconsistently (500/429/
                 # dropped connections, often with no Retry-After), so we space
                 # requests out and retry patiently.
-                HttpClient(cache_dir=cache / "dblp", min_interval=2.0, max_retries=6)
+                HttpClient(
+                    cache_dir=cache / "dblp",
+                    min_interval=2.0,
+                    max_retries=6,
+                    refresh=refresh,
+                )
             )
         elif name == "openalex":
             registry[name] = OpenAlexSource(
-                HttpClient(cache_dir=cache / "openalex", min_interval=0.2),
+                HttpClient(
+                    cache_dir=cache / "openalex", min_interval=0.2, refresh=refresh
+                ),
                 year_min=search.year_min,
                 year_max=search.year_max,
             )
@@ -43,7 +52,12 @@ def build_registry(search: SearchConfig, cache_root: str | Path) -> dict[str, So
                 api_key="present" if headers else "absent (expect 429s)",
             )
             registry[name] = SemanticScholarSource(
-                HttpClient(cache_dir=cache / "s2", min_interval=1.1, headers=headers)
+                HttpClient(
+                    cache_dir=cache / "s2",
+                    min_interval=1.1,
+                    headers=headers,
+                    refresh=refresh,
+                )
             )
         elif name == "google_scholar":
             registry[name] = GoogleScholarSource()

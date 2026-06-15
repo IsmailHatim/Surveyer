@@ -4,7 +4,27 @@ import structlog
 
 from surveyer.config import Query, SearchConfig
 from surveyer.models import Record
-from surveyer.sources import fetch_all
+from surveyer.sources import build_registry, fetch_all
+
+
+def test_build_registry_propagates_refresh(tmp_path):
+    search = SearchConfig(
+        sources=["dblp", "openalex", "semantic_scholar"],
+        queries=[Query(label="A", terms="x")],
+        max_results_per_query=10,
+    )
+    registry = build_registry(search, tmp_path, refresh=True)
+    assert all(src.client.refresh for src in registry.values())
+
+
+def test_build_registry_defaults_refresh_off(tmp_path):
+    search = SearchConfig(
+        sources=["dblp"],
+        queries=[Query(label="A", terms="x")],
+        max_results_per_query=10,
+    )
+    registry = build_registry(search, tmp_path)
+    assert registry["dblp"].client.refresh is False
 
 
 class FakeSource:

@@ -121,12 +121,13 @@ class BibtexResolver:
         log.info("bibtex.resolved", total=total, local_fallbacks=n_local)
 
 
-def build_resolver(cache_root: str | Path) -> BibtexResolver:
+def build_resolver(cache_root: str | Path, *, refresh: bool = False) -> BibtexResolver:
     """Build a resolver with a throttled, caching HTTP client."""
     client = HttpClient(
         cache_dir=Path(cache_root) / "bibtex",
         min_interval=_MIN_INTERVAL,
         headers={"User-Agent": "Surveyer (https://github.com/IsmailHatim/Surveyer)"},
         follow_redirects=True,
+        refresh=refresh,
     )
     return BibtexResolver(client)

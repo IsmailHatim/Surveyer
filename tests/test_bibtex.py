@@ -145,6 +145,13 @@ def test_build_resolver_follows_redirects(tmp_path):
     assert resolver.client._client.follow_redirects is True
 
 
+def test_build_resolver_propagates_refresh(tmp_path):
+    from surveyer.bibtex import build_resolver
+
+    assert build_resolver(tmp_path, refresh=True).client.refresh is True
+    assert build_resolver(tmp_path).client.refresh is False
+
+
 def test_resolve_percent_encodes_doi(tmp_path):
     # A '#' in a DOI must reach the server encoded, not be parsed as a fragment.
     seen: dict[str, str] = {}

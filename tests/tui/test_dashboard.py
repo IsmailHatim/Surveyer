@@ -120,6 +120,53 @@ async def test_run_streams_logs_and_summary(config_file, monkeypatch):
     assert "prisma.svg" in log_lines
 
 
+async def test_refresh_checkbox_forwarded_to_pipeline(config_file, monkeypatch):
+    """Ticking the run refresh checkbox passes refresh=True to run_pipeline."""
+    from textual.widgets import Checkbox
+
+    from surveyer.models import Ledger
+    from surveyer.pipeline import PipelineResult
+
+    seen: dict[str, object] = {}
+
+    def fake_run_pipeline(cfg, **kwargs):
+        seen.update(kwargs)
+        return PipelineResult(ledger=Ledger(included=0), kept=[], excluded=[])
+
+    monkeypatch.setattr("surveyer.pipeline.run_pipeline", fake_run_pipeline)
+
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.query_one("#refresh", Checkbox).value = True
+        app.screen.action_run()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+    assert seen.get("refresh") is True
+
+
+async def test_refresh_checkbox_defaults_off(config_file, monkeypatch):
+    """Without ticking refresh, run_pipeline receives refresh=False."""
+    from surveyer.models import Ledger
+    from surveyer.pipeline import PipelineResult
+
+    seen: dict[str, object] = {}
+
+    def fake_run_pipeline(cfg, **kwargs):
+        seen.update(kwargs)
+        return PipelineResult(ledger=Ledger(included=0), kept=[], excluded=[])
+
+    monkeypatch.setattr("surveyer.pipeline.run_pipeline", fake_run_pipeline)
+
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_run()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+    assert seen.get("refresh") is False
+
+
 async def test_run_reports_pipeline_error(config_file, monkeypatch):
     """When the pipeline raises, the error message appears in the log pane."""
 

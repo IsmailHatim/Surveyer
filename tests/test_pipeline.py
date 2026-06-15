@@ -105,6 +105,41 @@ def test_run_pipeline_end_to_end(tmp_path):
     assert len(result.excluded) == 1
 
 
+def test_run_pipeline_forwards_refresh_to_builders(tmp_path, monkeypatch):
+    import surveyer.bibtex as bibtex
+    import surveyer.pipeline as pipeline
+
+    seen: dict[str, bool] = {}
+
+    def fake_build_registry(search, cache_root, *, refresh=False):
+        seen["registry"] = refresh
+        return {"fake": FakeSource()}
+
+    def fake_build_resolver(cache_root, *, refresh=False):
+        seen["resolver"] = refresh
+        return FakeResolver()
+
+    monkeypatch.setattr(pipeline, "build_registry", fake_build_registry)
+    monkeypatch.setattr(bibtex, "build_resolver", fake_build_resolver)
+
+    run_pipeline(_cfg(tmp_path), scorer=FakeScorer(), refresh=True)
+    assert seen == {"registry": True, "resolver": True}
+
+
+def test_run_pipeline_defaults_refresh_off(tmp_path, monkeypatch):
+    import surveyer.pipeline as pipeline
+
+    seen: dict[str, bool] = {}
+
+    def fake_build_registry(search, cache_root, *, refresh=False):
+        seen["registry"] = refresh
+        return {"fake": FakeSource()}
+
+    monkeypatch.setattr(pipeline, "build_registry", fake_build_registry)
+    run_pipeline(_cfg(tmp_path), scorer=FakeScorer(), resolve_bibtex=False)
+    assert seen["registry"] is False
+
+
 def _baseline_xlsx(path):
     """A screened v1: one manually kept paper, one manually excluded paper.
 

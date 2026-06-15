@@ -40,10 +40,16 @@ def main(
 @app.command()
 def run(
     config: str = typer.Option(..., "--config", "-c", help="Path to survey.toml"),
+    refresh: bool = typer.Option(
+        False,
+        "--refresh",
+        help="Bypass the HTTP cache and refetch from sources and BibTeX "
+        "(does not re-run LLM scoring).",
+    ),
 ) -> None:
     """Run the full pipeline: fetch -> deduplication -> filter -> export -> prisma."""
     cfg = load_config(config)
-    result = run_pipeline(cfg)
+    result = run_pipeline(cfg, refresh=refresh)
     typer.echo(
         f"Done. Identified {result.ledger.total_identified()}, "
         f"included {result.ledger.included}. "
@@ -63,11 +69,18 @@ def run(
 
 
 @app.command()
-def fetch(config: str = typer.Option(..., "--config", "-c")) -> None:
+def fetch(
+    config: str = typer.Option(..., "--config", "-c"),
+    refresh: bool = typer.Option(
+        False,
+        "--refresh",
+        help="Bypass the HTTP cache and refetch from sources.",
+    ),
+) -> None:
     """Fetch, deduplication and export the raw record set."""
     cfg = load_config(config)
     disable_filters(cfg)
-    result = run_pipeline(cfg, resolve_bibtex=False)
+    result = run_pipeline(cfg, resolve_bibtex=False, refresh=refresh)
     typer.echo(
         f"Fetched and deduplicated: {result.ledger.after_dedup()} records "
         f"in {cfg.project.output_dir}/"
@@ -102,6 +115,12 @@ def prisma(config: str = typer.Option(..., "--config", "-c")) -> None:
 @app.command()
 def extend(
     config: str = typer.Option(..., "--config", "-c", help="Path to survey.toml"),
+    refresh: bool = typer.Option(
+        False,
+        "--refresh",
+        help="Bypass the HTTP cache and refetch from sources and BibTeX "
+        "(does not re-run LLM scoring).",
+    ),
 ) -> None:
     """Extend a screened survey: new queries on top of a screened xlsx."""
     cfg = load_config(config)
@@ -112,7 +131,7 @@ def extend(
             err=True,
         )
         raise typer.Exit(1)
-    result = run_pipeline(cfg)
+    result = run_pipeline(cfg, refresh=refresh)
     led = result.ledger
     typer.echo(
         f"Done. Carried over {led.previously_included} screened papers, "

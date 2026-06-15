@@ -245,7 +245,9 @@ def test_extract_reads_concepts():
     doc = tomlkit.parse(SAMPLE)
     values = extract_form(doc)
     assert values.search_concepts == [
-        ConceptItem(name="federated", synonyms=["federated learning", "federated averaging"])
+        ConceptItem(
+            name="federated", synonyms=["federated learning", "federated averaging"]
+        )
     ]
     assert values.filter_concepts == [
         ConceptItem(name="federated", synonyms=["federated learning"])
@@ -268,7 +270,7 @@ def test_apply_edits_concepts_and_preserves_comments():
     ]
     apply_form(doc, values)
     text = tomlkit.dumps(doc)
-    assert 'keep this comment' in text  # untouched comment survives
+    assert "keep this comment" in text  # untouched comment survives
     assert '"FL"' in text
     assert 'privacy = ["differential privacy"]' in text
     # re-extract round-trips

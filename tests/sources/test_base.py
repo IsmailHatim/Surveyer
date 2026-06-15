@@ -22,6 +22,69 @@ def test_http_client_caches(tmp_path):
     assert calls["n"] == 1  # second call served from cache
 
 
+def test_http_client_refresh_bypasses_cache(tmp_path):
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"n": calls["n"]})
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(cache_dir=tmp_path, transport=transport, refresh=True)
+
+    a = client.get_json("https://example.test/x", params={"q": "1"})
+    b = client.get_json("https://example.test/x", params={"q": "1"})
+
+    assert calls["n"] == 2  # refresh refetches every time
+    assert a == {"n": 1}
+    assert b == {"n": 2}  # cache overwritten with the fresh response
+
+
+def test_http_client_refresh_overwrites_then_serves_fresh(tmp_path):
+    # A refresh run rewrites the cache so a later normal client is fast again.
+    seq = [{"v": "stale"}, {"v": "fresh"}]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=seq.pop(0))
+
+    transport = httpx.MockTransport(handler)
+    HttpClient(cache_dir=tmp_path, transport=transport).get_json(
+        "https://example.test/x", params={}
+    )  # seeds the cache with "stale"
+
+    refreshed = HttpClient(
+        cache_dir=tmp_path, transport=transport, refresh=True
+    ).get_json("https://example.test/x", params={})
+    assert refreshed == {"v": "fresh"}
+
+    calls = {"n": 0}
+
+    def count(request: httpx.Request) -> httpx.Response:  # should not be hit
+        calls["n"] += 1
+        return httpx.Response(200, json={"v": "should-not-happen"})
+
+    served = HttpClient(
+        cache_dir=tmp_path, transport=httpx.MockTransport(count)
+    ).get_json("https://example.test/x", params={})
+    assert served == {"v": "fresh"}  # normal client serves the overwritten cache
+    assert calls["n"] == 0
+
+
+def test_get_text_refresh_bypasses_cache(tmp_path):
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, text=f"@misc{{k{calls['n']}}}")
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(cache_dir=tmp_path, transport=transport, refresh=True)
+
+    client.get_text("https://dblp.org/rec/k.bib")
+    client.get_text("https://dblp.org/rec/k.bib")
+    assert calls["n"] == 2  # refresh refetches the bibtex too
+
+
 def test_http_client_retries_on_500(tmp_path):
     seq = [500, 500, 200]
 

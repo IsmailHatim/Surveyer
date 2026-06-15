@@ -40,6 +40,7 @@ class HttpClient:
         max_backoff: float = 60.0,
         headers: dict[str, str] | None = None,
         follow_redirects: bool = False,
+        refresh: bool = False,
     ) -> None:
         """Initialise the client with cache directory and retry settings."""
         self.cache_dir = Path(cache_dir)
@@ -54,6 +55,7 @@ class HttpClient:
         self.max_retries = max_retries
         self.backoff = backoff
         self.max_backoff = max_backoff
+        self.refresh = refresh
         self._last_call = 0.0
 
     def _retry_wait(self, attempt: int, retry_after: str | None = None) -> float:
@@ -80,7 +82,7 @@ class HttpClient:
     def get_json(self, url: str, *, params: dict) -> dict:
         """Fetch JSON from url with caching, rate limiting, and retries."""
         cache = self._cache_path(url, params)
-        if cache.exists():
+        if cache.exists() and not self.refresh:
             return json.loads(cache.read_text())
 
         for attempt in range(1, self.max_retries + 1):
@@ -121,7 +123,7 @@ class HttpClient:
         params = params or {}
         headers = headers or {}
         cache = self._cache_path(url, params, suffix="txt", extra={"headers": headers})
-        if cache.exists():
+        if cache.exists() and not self.refresh:
             text = cache.read_text()
             return text or None
 

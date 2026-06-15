@@ -145,6 +145,13 @@ class DashboardScreen(Screen):
                         ),
                         id="concepts",
                     )
+
+                    yield Static("run", classes="section-title")
+                    yield Checkbox(
+                        "Refresh — bypass HTTP cache, refetch from sources",
+                        value=False,
+                        id="refresh",
+                    )
                 yield ConceptsEditor(
                     v.search_concepts, v.filter_concepts, id="concepts_editor"
                 )
@@ -361,16 +368,19 @@ class DashboardScreen(Screen):
             self._write_log("A run is already in progress.")
             return
         self._pipeline_running = True
+        refresh = self.query_one("#refresh", Checkbox).value
         mode = "fetch-only" if fetch_only else "full pipeline"
+        if refresh:
+            mode += " (refresh)"
         self.query_one("#log", RichLog).border_title = f"run log - {mode} running…"
         self._write_log(f"Starting {mode} run...")
         self.run_worker(
-            lambda: self._pipeline_worker(fetch_only=fetch_only),
+            lambda: self._pipeline_worker(fetch_only=fetch_only, refresh=refresh),
             thread=True,
             exclusive=True,
         )
 
-    def _pipeline_worker(self, *, fetch_only: bool) -> None:
+    def _pipeline_worker(self, *, fetch_only: bool, refresh: bool = False) -> None:
         """Worker body: run the pipeline, streaming structlog events to the pane."""
         import surveyer.pipeline as pipeline
         from surveyer.config import disable_filters, load_config
@@ -384,7 +394,9 @@ class DashboardScreen(Screen):
             if fetch_only:
                 disable_filters(cfg)
             with forward_logs(write):
-                result = pipeline.run_pipeline(cfg, resolve_bibtex=not fetch_only)
+                result = pipeline.run_pipeline(
+                    cfg, resolve_bibtex=not fetch_only, refresh=refresh
+                )
             led = result.ledger
             if fetch_only:
                 write(

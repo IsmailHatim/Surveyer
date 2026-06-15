@@ -146,6 +146,64 @@ def test_fetch_skips_bibtex(tmp_path, monkeypatch):
     assert captured.get("resolve_bibtex") is False
 
 
+def _capture_refresh_cmd(tmp_path, monkeypatch, argv):
+    captured = {}
+
+    def fake_run(cfg, **kwargs):
+        captured.update(kwargs)
+        from surveyer.models import Ledger
+        from surveyer.pipeline import PipelineResult
+
+        return PipelineResult(ledger=Ledger(), kept=[], excluded=[])
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run)
+    result = runner.invoke(cli.app, argv)
+    assert result.exit_code == 0, result.output
+    return captured
+
+
+def test_run_refresh_flag_forwarded(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
+    captured = _capture_refresh_cmd(
+        tmp_path, monkeypatch, ["run", "--config", str(cfg_path), "--refresh"]
+    )
+    assert captured.get("refresh") is True
+
+
+def test_run_refresh_defaults_off(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
+    captured = _capture_refresh_cmd(
+        tmp_path, monkeypatch, ["run", "--config", str(cfg_path)]
+    )
+    assert captured.get("refresh") is False
+
+
+def test_fetch_refresh_flag_forwarded(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
+    captured = _capture_refresh_cmd(
+        tmp_path, monkeypatch, ["fetch", "--config", str(cfg_path), "--refresh"]
+    )
+    assert captured.get("refresh") is True
+
+
+def test_extend_refresh_flag_forwarded(tmp_path, monkeypatch):
+    baseline = tmp_path / "v1.xlsx"
+    baseline.touch()
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(
+        EXTEND_SAMPLE.replace("OUT", str(tmp_path / "out")).replace(
+            "BASELINE", str(baseline)
+        )
+    )
+    captured = _capture_refresh_cmd(
+        tmp_path, monkeypatch, ["extend", "--config", str(cfg_path), "--refresh"]
+    )
+    assert captured.get("refresh") is True
+
+
 def test_run_reports_bibtex(tmp_path, monkeypatch):
     cfg_path = tmp_path / "survey.toml"
     cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))
