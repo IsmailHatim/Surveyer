@@ -47,7 +47,8 @@ def deduplicate(
     records: list[Record], *, title_threshold: int = 90
 ) -> tuple[list[Record], int]:
     """Return (deduplicated records, number removed). Provenance is merged."""
-    kept: list[Record] = []
+    # Each kept record is paired with its normalized title to reduce complexity
+    kept: list[tuple[Record, str]] = []
     by_doi: dict[str, Record] = {}
     removed = 0
 
@@ -62,7 +63,7 @@ def deduplicate(
         match = None
         # Skip fuzzy matching for empty normalized titles
         if norm:
-            for existing in kept:
+            for existing, ex_norm in kept:
                 ex_doi = existing.doi.lower().strip() if existing.doi else None
                 # Conflicting DOIs block a merge unless one side is a preprint
                 if (
@@ -72,10 +73,7 @@ def deduplicate(
                     and not (_is_weak_doi(doi) or _is_weak_doi(ex_doi))
                 ):
                     continue
-                if (
-                    fuzz.token_sort_ratio(norm, normalize_title(existing.title))
-                    >= title_threshold
-                ):
+                if fuzz.token_sort_ratio(norm, ex_norm) >= title_threshold:
                     match = existing
                     break
 
@@ -88,8 +86,8 @@ def deduplicate(
                 by_doi[doi] = match
             continue
 
-        kept.append(r)
+        kept.append((r, norm))
         if doi:
             by_doi[doi] = r
 
-    return kept, removed
+    return [record for record, _ in kept], removed
