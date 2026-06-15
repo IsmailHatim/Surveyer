@@ -54,10 +54,15 @@ Everything is driven by a few keys:
 |-----|--------|
 | `Enter` | choose a survey config |
 | `S` | save the config (validated first, comments preserved) |
-| `E` | open the TOML in `$EDITOR` (for concept blocks) |
-| `R` / `F` | run the full pipeline / fetch-only, with live logs and a PRISMA summary |
+| `c` | edit search/filter concept blocks in-app |
+| `E` | open the TOML in `$EDITOR` |
+| `R` / `F` | run the full pipeline or fetch-only, with live logs and a PRISMA summary |
+| `Esc` | back, or cancel a running pipeline |
 | `O` | open the output folder (xlsx, references.bib, PRISMA figure) |
-| `Esc` / `Q` | back / quit |
+| `Q` | quit |
+
+Check the **Refresh** checkbox before running to bypass the HTTP cache and refetch
+sources and BibTeX.
 
 ### Command line
 
@@ -73,6 +78,9 @@ uv run surveyer prisma --config examples/survey.toml
 
 # Search new queries on top of a manually screened survey.xlsx
 uv run surveyer extend --config examples/survey_v2.toml
+
+# Bypass the HTTP cache and refetch (works on run, fetch and extend)
+uv run surveyer run --config examples/survey.toml --refresh
 ```
 
 ## Configure
@@ -93,59 +101,41 @@ Or keep them in the `.env` file and load it automatically:
 uv run --env-file .env surveyer run --config examples/survey.toml
 ```
 
-### Concept-group expansion
+### Concept groups
 
-Rather than hand-writing every keyword combination as a separate
-`[[search.queries]]`, you can declare concept blocks of synonyms. Synonyms
-within a concept are OR alternatives; the concepts are combined with AND. The
-tool expands the cross-product into queries automatically:
+Rather than handwriting every keyword combination, you can declare concept blocks of
+synonyms. Synonyms within a concept are OR statements; concepts combine with
+AND. `[search.concepts]` expands the cross-product into queries, while `[filter.concepts]`
+keeps a record only if it matches one synonym from **every** concept and contains
+no `exclude` term. The two are independent, so you can do a vast search but keep
+only records that cover all concepts.
 
 ```toml
-[search.concepts]
+[search.concepts]   # [filter.concepts] works the same way
 federated = ["federated learning", "federated averaging"]
 security  = ["secure aggregation", "model poisoning", "byzantine robust"]
 privacy   = ["differential privacy", "privacy preserving"]
 ```
 
-The block above generates 2 × 3 × 2 = 12 queries. Generated queries are added to
-any explicit `[[search.queries]]` (a generated query whose terms exactly match an
-explicit one is dropped). Each gets a traceable label such as
-`concept_federated0__security0__privacy0`. Above 100 generated queries the tool
-logs a warning, since every query hits every source. See `examples/survey.toml`
-for a complete example.
-
-### Concept filtering
-
-Mirror the search concepts on the filtering side with `[filter.concepts]`. When
-present, a record is kept only if it matches at least one synonym from **every**
-concept block (AND across concepts, OR within) and contains no `exclude` term —
-the flat `filter.keyword.include` list is ignored while concepts are active.
-
-```toml
-[filter.concepts]
-federated = ["federated learning", "federated averaging"]
-security  = ["secure aggregation", "model poisoning", "byzantine"]
-privacy   = ["differential privacy", "privacy preserving"]
-```
-
-This is independent from `[search.concepts]`, so you can search broadly but keep
-only records that genuinely cover all concepts.
+Generated queries are added to any explicit `[[search.queries]]`. 
+In the dashboard, edit both blocks in-app with `c`: no
+manual TOML required. See `examples/survey.toml` for a complete example.
 
 ### LLM scoring provider
 
 LLM relevance scoring runs through `filter.llm`. Two providers are supported:
 
-- `openai` (default) — set `OPENAI_API_KEY`.
-- `ollama` — runs a local or networked [Ollama](https://ollama.com) model, no
+- `openai` (default) - set `OPENAI_API_KEY`.
+- `ollama` - runs a local or networked [Ollama](https://ollama.com) model, no
   API key needed. Install the extra (`uv sync --extra ollama`), then set
   `provider = "ollama"`, the `model` name, and `host` (default
-  `http://localhost:11434`; point it at any Ollama server on your network).
+  `http://localhost:11434`).
 
 ## Extend a screened survey
 
-After a run, you typically screen `survey.xlsx` by hand: move rows between the
-`papers` and `excluded` sheets, add papers you found yourself, color cells or
-leave comments. To search for *additional* studies later (new queries or
+After a run, you can check `survey.xlsx` by hand: move rows between the
+`papers` and `excluded` sheets, add papers you found on your own, color cells or
+leave comments. Then, to search for *additional* studies later (new queries or
 keywords) without redoing that work, point a new config at the screened
 workbook:
 
@@ -154,21 +144,16 @@ workbook:
 xlsx = "runs/v1/survey.xlsx"   # the manually screened workbook
 
 [project]
-output_dir = "runs/v2"         # must differ from the v1 run
+output_dir = "runs/v2"         # must differ from the v1
 ```
 
-Your manual decisions are final: papers in the `papers` sheet are always kept
-and never refiltered or rescored, papers in `excluded` stay excluded, and
-records the new search re-finds are dropped and counted as `already_screened`.
-The keyword and LLM filters apply only to newly discovered papers.
+Your manual decisions are final: `papers` rows are  kept) and `excluded` rows 
+stay excluded, and re-found records are dropped as `already_screened`. 
+Filters apply only to newly discovered papers.
 
-The output `survey.xlsx` is a **copy** of your screened file with the new rows
-appended at the bottom of each sheet, manual colors and comments are
-preserved, and the original file is never modified. Hand added papers missing
-a BibTeX entry get one resolved and backfilled, `references.bib` covers old
-and new papers, and the PRISMA diagram switches to the PRISMA 2020 review
-update layout (previous-version box and cumulative total). Extending requires
-`export_format = "xlsx"`, and you can chain updates.
+The output `survey.xlsx` is a **copy** of your screened file with new rows appended, missing 
+BibTeX is backfilled, and the PRISMA diagram switches to the 2020 review-update layout
+(previous-version box and cumulative total). Requires `export_format = "xlsx"` (updates can be iterated)
 
 ## Sources
 
@@ -189,12 +174,12 @@ update layout (previous-version box and cumulative total). Extending requires
 ### BibTeX citations
 
 `surveyer run` resolves a BibTeX entry for every included paper and writes them
-to `references.bib`. Each entry also appears in a `bibtex` column of the
-`papers` sheet (and `papers.csv`), so you can copy a single citation straight
-from the spreadsheet.
+to `references.bib`. Each citation also appears in a `bibtex` column of the
+`papers` sheet (and `papers.csv`), so you can copy a single citation directly
+from the sheet.
 
 Entries are fetched from authoritative sources rather than synthesized, in
-priority order:
+this priority order:
 
 | `bibtex_source` | Where it comes from |
 |-----------------|---------------------|
@@ -202,11 +187,9 @@ priority order:
 | `doi` | CrossRef/DataCite via DOI content negotiation |
 | `local` | Minimal `@misc` built from the record's own metadata |
 
-`local` entries are a last resort for papers with neither a DBLP key nor a DOI;
-they are highlighted in red in the `.xlsx` so you can spot (and hand-fix) the
-lower-quality citations at a glance. In CSV, filter on the `bibtex_source`
-column instead. Fetched entries are cached under the run's `cache/` directory,
-so re-runs cost no extra network requests.
+`local` entries are a last resort for papers with neither a DBLP key nor a DOI.
+They are highlighted red in the `.xlsx` so you can spot and hand-fix lower-quality citations. 
+Fetched entries are cached under the `cache/` directory, so you can re run without extra requests.
 
 ### PRISMA flow diagram
 
@@ -226,8 +209,8 @@ brew install graphviz
 apt-get install graphviz
 ```
 
-If the binray is not installed the run still creates: `prisma.mmd` and `prisma.dot`
-(the raw diagram source) are written and a warning is logged.
+Without the binary the run still writes `prisma.mmd` and `prisma.dot` (the raw
+diagram source) and logs a warning.
 
 ## License
 
