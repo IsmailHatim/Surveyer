@@ -40,6 +40,41 @@ def test_fetch_disables_filtering(tmp_path, monkeypatch):
     assert seen["include"] == []
 
 
+CONCEPT_SAMPLE = """
+[project]
+name = "demo"
+output_dir = "OUT"
+
+[search]
+sources = ["dblp"]
+[[search.queries]]
+label = "A"
+terms = "x"
+
+[filter.concepts]
+method = ["graph neural network"]
+"""
+
+
+def test_fetch_disables_concept_filter(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "survey.toml"
+    cfg_path.write_text(CONCEPT_SAMPLE.replace("OUT", str(tmp_path / "out")))
+
+    seen = {}
+
+    def fake_run(cfg, **kwargs):
+        seen["concepts"] = cfg.filter.concepts
+        from surveyer.models import Ledger
+        from surveyer.pipeline import PipelineResult
+
+        return PipelineResult(ledger=Ledger(), kept=[], excluded=[])
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run)
+    result = runner.invoke(cli.app, ["fetch", "--config", str(cfg_path)])
+    assert result.exit_code == 0, result.output
+    assert seen["concepts"] is None
+
+
 def test_prisma_missing_ledger_errors(tmp_path):
     cfg_path = tmp_path / "survey.toml"
     cfg_path.write_text(SAMPLE.replace("OUT", str(tmp_path / "out")))

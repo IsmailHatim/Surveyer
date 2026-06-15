@@ -4,10 +4,14 @@ import pytest
 import structlog
 
 from surveyer.config import (
+    FilterConfig,
+    KeywordConfig,
     LLMConfig,
+    ProjectConfig,
     Query,
     SearchConfig,
     SurveyConfig,
+    disable_filters,
     expand_concepts,
     load_config,
 )
@@ -420,3 +424,20 @@ def test_extend_rejects_overwriting_baseline(tmp_path):
     )
     with pytest.raises(ValueError, match="output_dir"):
         load_config(p)
+
+
+def test_disable_filters_clears_all_screening():
+    cfg = SurveyConfig(
+        project=ProjectConfig(name="demo"),
+        search=SearchConfig(sources=["dblp"], queries=[Query(label="A", terms="x")]),
+        filter=FilterConfig(
+            concepts={"method": ["gnn"]},
+            keyword=KeywordConfig(include=["a"], exclude=["b"]),
+            llm=LLMConfig(enabled=True, survey_abstract="abstract"),
+        ),
+    )
+    disable_filters(cfg)
+    assert cfg.filter.concepts is None
+    assert cfg.filter.keyword.include == []
+    assert cfg.filter.keyword.exclude == []
+    assert cfg.filter.llm.enabled is False

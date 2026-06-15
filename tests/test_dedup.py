@@ -102,6 +102,32 @@ def test_dedup_backfills_missing_fields():
     assert merged[0].abstract == "hello"
 
 
+def test_dedup_backfills_authors_and_keywords():
+    # The survivor has empty author/keyword lists; the duplicate has them filled.
+    a = Record(title="Same paper", doi="10.1/x")
+    b = Record(title="Same paper", doi="10.1/x", authors=["Jane Doe"], keywords=["gnn"])
+    merged, removed = deduplicate([a, b])
+    assert removed == 1
+    assert merged[0].authors == ["Jane Doe"]
+    assert merged[0].keywords == ["gnn"]
+
+
+def test_dedup_unions_keywords():
+    a = Record(title="Same paper", doi="10.1/x", keywords=["graph"])
+    b = Record(title="Same paper", doi="10.1/x", keywords=["neural"])
+    merged, _ = deduplicate([a, b])
+    assert set(merged[0].keywords) == {"graph", "neural"}
+
+
+def test_dedup_does_not_merge_empty_titles():
+    # token_sort_ratio("", "") == 100, so DOI-less empty titles must not collapse.
+    a = Record(title="", sources=["dblp"])
+    b = Record(title="   ", sources=["openalex"])
+    merged, removed = deduplicate([a, b])
+    assert len(merged) == 2
+    assert removed == 0
+
+
 def test_dedup_backfills_dblp_key():
     # First record has the DOI but no DBLP key
     records = [
