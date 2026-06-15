@@ -73,8 +73,11 @@ class SurveyerApp(App):
         margin-top: 1;
     }
 
-    #form {
+    #left {
         width: 55%;
+    }
+    #form {
+        width: 1fr;
         border: round $primary;
         border-title-color: $accent;
         border-title-style: bold;
@@ -116,6 +119,54 @@ class SurveyerApp(App):
         color: $text-muted;
         border: round $panel;
         padding: 0 1;
+    }
+    #concepts_editor {
+        width: 1fr;
+        border: round $primary;
+        border-title-color: $accent;
+        padding: 0 2 1 2;
+    }
+    #edit-concepts {
+        margin-bottom: 1;
+        width: 1fr;
+    }
+    .ce-title {
+        color: $accent;
+        text-style: bold;
+        margin-top: 1;
+        border-bottom: solid $panel;
+        width: 1fr;
+    }
+    .ce-actions {
+        height: auto;
+        margin-top: 1;
+    }
+    .ce-actions Button {
+        margin-right: 1;
+    }
+    .ce-hint {
+        color: $text-muted;
+        text-style: italic;
+        margin-top: 1;
+    }
+    #search-rows, #filter-rows {
+        height: auto;
+    }
+    .concept-row {
+        height: auto;
+        margin-top: 1;
+    }
+    .concept-name {
+        width: 24;
+        margin-right: 1;
+    }
+    .concept-syn {
+        width: 1fr;
+        margin-right: 1;
+    }
+    .concept-del {
+        width: 5;
+        min-width: 5;
     }
     #log {
         border: round $success;

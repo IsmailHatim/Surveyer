@@ -7,6 +7,7 @@ import pytest
 tomlkit = pytest.importorskip("tomlkit")
 
 from surveyer.tui.config_io import (  # noqa: E402
+    ConceptItem,
     apply_form,
     extract_form,
     validate_text,
@@ -238,3 +239,56 @@ def test_llm_host_roundtrip():
     assert 'host = "http://gpu-server:11434"' in tomlkit.dumps(doc)
     assert extract_form(doc).llm_host == "http://gpu-server:11434"
     assert validate_text(tomlkit.dumps(doc)) is None
+
+
+def test_extract_reads_concepts():
+    doc = tomlkit.parse(SAMPLE)
+    values = extract_form(doc)
+    assert values.search_concepts == [
+        ConceptItem(name="federated", synonyms=["federated learning", "federated averaging"])
+    ]
+    assert values.filter_concepts == [
+        ConceptItem(name="federated", synonyms=["federated learning"])
+    ]
+
+
+def test_extract_no_concepts_gives_empty_lists():
+    doc = tomlkit.parse(MINIMAL)
+    values = extract_form(doc)
+    assert values.search_concepts == []
+    assert values.filter_concepts == []
+
+
+def test_apply_edits_concepts_and_preserves_comments():
+    doc = tomlkit.parse(SAMPLE)
+    values = extract_form(doc)
+    values.search_concepts = [
+        ConceptItem(name="federated", synonyms=["federated learning", "FL"]),
+        ConceptItem(name="privacy", synonyms=["differential privacy"]),
+    ]
+    apply_form(doc, values)
+    text = tomlkit.dumps(doc)
+    assert 'keep this comment' in text  # untouched comment survives
+    assert '"FL"' in text
+    assert 'privacy = ["differential privacy"]' in text
+    # re-extract round-trips
+    assert extract_form(doc).search_concepts == values.search_concepts
+
+
+def test_apply_removes_emptied_concepts_table():
+    doc = tomlkit.parse(SAMPLE)
+    values = extract_form(doc)
+    values.filter_concepts = []
+    apply_form(doc, values)
+    assert "concepts" not in doc["filter"]
+    assert validate_text(tomlkit.dumps(doc)) is None
+
+
+def test_named_concept_without_synonyms_is_rejected():
+    doc = tomlkit.parse(SAMPLE)
+    values = extract_form(doc)
+    values.search_concepts = [ConceptItem(name="empty", synonyms=[])]
+    apply_form(doc, values)
+    error = validate_text(tomlkit.dumps(doc))
+    assert error is not None
+    assert "synonym" in error

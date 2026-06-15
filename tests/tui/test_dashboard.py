@@ -6,7 +6,10 @@ import pytest
 
 pytest.importorskip("textual")
 
+from textual.widgets import Button, ContentSwitcher, Input  # noqa: E402
+
 from surveyer.tui.app import SurveyerApp  # noqa: E402
+from surveyer.tui.concepts import ConceptRow, ConceptsEditor  # noqa: E402
 from surveyer.tui.picker import TEMPLATE  # noqa: E402
 
 
@@ -136,3 +139,178 @@ async def test_run_reports_pipeline_error(config_file, monkeypatch):
             "".join(seg.text for seg in line) for line in richlog.lines
         )
     assert "network down" in log_lines
+
+
+SEED_CONFIG = """\
+[project]
+name = "seed-survey"
+
+[search]
+sources = ["dblp"]
+
+[[search.queries]]
+label = "q1"
+terms = "federated learning"
+
+[search.concepts]
+federated = ["federated learning", "federated averaging"]
+"""
+
+
+@pytest.fixture()
+def seed_config_file(tmp_path: Path) -> Path:
+    """Write a config with [search.concepts] but no [filter.concepts]."""
+    p = tmp_path / "seed.toml"
+    p.write_text(SEED_CONFIG)
+    return p
+
+
+async def test_button_switches_to_concepts_editor(config_file):
+    """Editing concepts swaps the left panel; back returns to the form."""
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        switcher = app.screen.query_one("#left", ContentSwitcher)
+        assert switcher.current == "form"
+        app.screen.action_edit_concepts()
+        await pilot.pause()
+        assert switcher.current == "concepts_editor"
+        # Escape returns to the form
+        app.screen.action_back()
+        await pilot.pause()
+        assert switcher.current == "form"
+
+
+async def test_filter_seeded_from_search_when_absent(seed_config_file):
+    """When [filter.concepts] is absent, the editor seeds it from search."""
+    app = SurveyerApp(seed_config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        editor = app.screen.query_one(ConceptsEditor)
+        filter_items = editor.read("filter")
+        assert [c.name for c in filter_items] == ["federated"]
+        assert filter_items[0].synonyms == ["federated learning", "federated averaging"]
+
+
+async def test_add_concept_and_save_writes_toml(config_file):
+    """Adding a search concept and saving writes it to the TOML on disk."""
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_edit_concepts()
+        await pilot.pause()
+        editor = app.screen.query_one(ConceptsEditor)
+        editor.query_one("#add-search", Button).press()
+        await pilot.pause()
+        rows = list(editor.query_one("#search-rows").query(ConceptRow))
+        rows[-1].query_one(".concept-name", Input).value = "graph"
+        rows[-1].query_one(".concept-syn", Input).value = "graph neural network, GNN"
+        app.screen.action_save()
+        await pilot.pause()
+    text = config_file.read_text()
+    assert "[search.concepts]" in text
+    assert "graph neural network" in text
+
+
+async def test_blind_save_does_not_materialize_filter_concepts(seed_config_file):
+    """Saving without opening the editor must not write a seeded [filter.concepts]."""
+    app = SurveyerApp(seed_config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_save()
+        await pilot.pause()
+    text = seed_config_file.read_text()
+    assert "[filter.concepts]" not in text
+    # the search concepts the user did have are still present/untouched
+    assert "[search.concepts]" in text
+
+
+async def test_save_after_opening_editor_writes_seeded_filter(seed_config_file):
+    """Opening the editor then saving persists the filter seeded from search."""
+    app = SurveyerApp(seed_config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_edit_concepts()
+        await pilot.pause()
+        app.screen.action_save()
+        await pilot.pause()
+    text = seed_config_file.read_text()
+    assert "[filter.concepts]" in text
+    assert "federated" in text
+
+
+async def test_added_concept_rows_stack_without_overlap(config_file):
+    """Added rows render at distinct, non-zero heights (row container is auto-height)."""
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_edit_concepts()
+        await pilot.pause()
+        editor = app.screen.query_one(ConceptsEditor)
+        for _ in range(2):
+            editor.query_one("#add-search", Button).press()
+            await pilot.pause()
+        rows = list(editor.query_one("#search-rows").query(ConceptRow))
+        assert len(rows) >= 2
+        # every row is visible (non-zero height) and at a distinct vertical offset:
+        # a 1fr/overflow-hidden container would clip later rows to height 0 / same y.
+        assert all(r.region.height > 0 for r in rows)
+        assert len({r.region.y for r in rows}) == len(rows)
+
+
+async def test_reset_concepts_discards_unsaved_edits(seed_config_file):
+    """Reset rebuilds the editor from the saved config, dropping unsaved edits."""
+    app = SurveyerApp(seed_config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_edit_concepts()
+        await pilot.pause()
+        editor = app.screen.query_one(ConceptsEditor)
+        # mutate an existing row and add a brand-new one
+        srows = list(editor.query_one("#search-rows").query(ConceptRow))
+        srows[0].query_one(".concept-name", Input).value = "garbage"
+        editor.query_one("#add-search", Button).press()
+        await pilot.pause()
+        assert len(list(editor.query_one("#search-rows").query(ConceptRow))) == 2
+        # reset -> back to exactly the saved config's single 'federated' concept
+        editor.query_one("#reset-concepts", Button).press()
+        await pilot.pause()
+        search = editor.read("search")
+        assert [c.name for c in search] == ["federated"]
+        assert search[0].synonyms == ["federated learning", "federated averaging"]
+        # filter is re-seeded from search (saved config had no [filter.concepts])
+        assert [c.name for c in editor.read("filter")] == ["federated"]
+
+
+async def test_reset_concepts_is_noop_on_form(config_file):
+    """Reset only acts while the editor is open; on the form it does nothing."""
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        # never opened the editor: action_reset_concepts must be a quiet no-op
+        app.screen.action_reset_concepts()
+        await pilot.pause()
+        assert app.screen.query_one("#left", ContentSwitcher).current == "form"
+
+
+async def test_copy_from_search_mirrors_into_filter(seed_config_file):
+    """'Copy from search' replaces the filter rows with the search rows."""
+    app = SurveyerApp(seed_config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.action_edit_concepts()
+        await pilot.pause()
+        editor = app.screen.query_one(ConceptsEditor)
+        # add a fresh search concept, then copy everything to filter
+        editor.query_one("#add-search", Button).press()
+        await pilot.pause()
+        srows = list(editor.query_one("#search-rows").query(ConceptRow))
+        srows[-1].query_one(".concept-name", Input).value = "privacy"
+        srows[-1].query_one(".concept-syn", Input).value = "differential privacy"
+        editor.query_one("#copy-search", Button).press()
+        await pilot.pause()
+        # pre-seeded federated row is replaced (not duplicated); synonyms copy too
+        filter_items = editor.read("filter")
+        assert [c.name for c in filter_items] == ["federated", "privacy"]
+        assert filter_items[0].synonyms == ["federated learning", "federated averaging"]
+        assert filter_items[1].synonyms == ["differential privacy"]
