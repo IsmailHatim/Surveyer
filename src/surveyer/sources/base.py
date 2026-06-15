@@ -19,11 +19,7 @@ log = structlog.get_logger()
 
 
 def _parse_retry_after(value: str) -> float | None:
-    """Parse a Retry-After header (delta-seconds or HTTP-date) to seconds.
-
-    Returns None if the value is neither a non-negative integer nor a valid
-    HTTP-date, so the caller can fall back to exponential backoff.
-    """
+    """Parse a Retry-After header (delta-seconds or HTTP-date) to seconds."""
     value = value.strip()
     if value.isdigit():
         return float(value)
