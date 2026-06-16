@@ -51,6 +51,7 @@ class SemanticScholarSource:
         while len(out) < max_results:
             limit = min(max_results - len(out), PAGE_SIZE)
             params = {
+                # Quotes are intentionally preserved for s2
                 "query": terms,
                 "offset": offset,
                 "limit": limit,

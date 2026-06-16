@@ -41,6 +41,18 @@ def test_s2_search_paginates_past_the_100_cap(tmp_path):
     assert len(records) == 150
 
 
+def test_s2_search_preserves_quoted_phrases(tmp_path):
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params["query"])
+        return httpx.Response(200, json={"total": 0, "offset": 0, "data": []})
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    SemanticScholarSource(client).search('"graph neural network" survey', max_results=10)
+    assert seen == ['"graph neural network" survey']
+
+
 def test_s2_search_stops_at_max_results(tmp_path):
     def handler(request: httpx.Request) -> httpx.Response:
         offset = int(request.url.params.get("offset", "0"))

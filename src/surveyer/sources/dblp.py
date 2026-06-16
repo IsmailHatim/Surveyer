@@ -6,7 +6,7 @@ import httpx
 import structlog
 
 from surveyer.models import Record
-from surveyer.sources.base import HttpClient
+from surveyer.sources.base import HttpClient, dequote_terms
 
 log = structlog.get_logger()
 
@@ -56,7 +56,8 @@ class DblpSource:
 
     def search(self, terms: str, *, max_results: int) -> list[Record]:
         """Search DBLP and return records, falling back to the Trier mirror."""
-        params = {"q": terms, "format": "json", "h": max_results}
+        # DBLP has no phrase operator; drop phrase quotes to prefix-AND matching.
+        params = {"q": dequote_terms(terms), "format": "json", "h": max_results}
         try:
             raw = self.client.get_json(self.api, params=params)
         except (httpx.HTTPError, RuntimeError):

@@ -311,6 +311,21 @@ def test_expand_concepts_duplicate_synonyms_get_distinct_labels():
     ]
 
 
+def test_expand_concepts_quotes_multi_word_synonyms():
+    out = expand_concepts({"graph": ["graph neural network", "gnn"]})
+    assert [q.terms for q in out] == ['"graph neural network"', "gnn"]
+
+
+def test_expand_concepts_quotes_phrases_in_cross_product():
+    out = expand_concepts({"a": ["graph neural network"], "b": ["link prediction"]})
+    assert [q.terms for q in out] == ['"graph neural network" "link prediction"']
+
+
+def test_expand_concepts_does_not_double_wrap_quoted_synonym():
+    out = expand_concepts({"graph": ['"already quoted"']})
+    assert [q.terms for q in out] == ['"already quoted"']
+
+
 def test_resolved_queries_concatenates_explicit_and_generated():
     cfg = SearchConfig(
         sources=["dblp"],

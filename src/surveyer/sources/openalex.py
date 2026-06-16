@@ -80,6 +80,7 @@ class OpenAlexSource:
         out: list[Record] = []
         page = 1
         while len(out) < max_results:
+            # Quotes are intentionally preserved for OpenAlex
             params: dict = {"search": terms, "per-page": per_page, "page": page}
             if filters:
                 params["filter"] = ",".join(filters)

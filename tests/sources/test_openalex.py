@@ -48,6 +48,18 @@ def test_openalex_search_paginates_past_one_page(tmp_path):
     assert len(records) == 250
 
 
+def test_openalex_search_preserves_quoted_phrases(tmp_path):
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params["search"])
+        return httpx.Response(200, json={"meta": {"count": 0}, "results": []})
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    OpenAlexSource(client).search('"graph neural network" survey', max_results=10)
+    assert seen == ['"graph neural network" survey']
+
+
 def test_openalex_search_stops_when_results_exhausted(tmp_path):
     # Only 30 results exist even though 200 were requested.
     def handler(request: httpx.Request) -> httpx.Response:

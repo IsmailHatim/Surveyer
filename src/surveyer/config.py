@@ -41,6 +41,12 @@ class Query(msgspec.Struct, kw_only=True):
     terms: str
 
 
+def _quote_phrase(synonym: str) -> str:
+    """Wrap a multi-word synonym in double quotes for phrase matching."""
+    s = synonym.strip()
+    return f'"{s}"' if (" " in s and not s.startswith('"')) else s
+
+
 def expand_concepts(concepts: dict[str, list[str]] | None) -> list[Query]:
     """Expand concept OR into the AND cross-product of queries."""
     if not concepts:
@@ -49,7 +55,7 @@ def expand_concepts(concepts: dict[str, list[str]] | None) -> list[Query]:
     value_lists = [concepts[k] for k in keys]
     queries: list[Query] = []
     for combo in itertools.product(*(enumerate(v) for v in value_lists)):
-        terms = " ".join(syn for _, syn in combo)
+        terms = " ".join(_quote_phrase(syn) for _, syn in combo)
         label = "concept_" + "__".join(
             f"{key}{idx}" for key, (idx, _) in zip(keys, combo)
         )

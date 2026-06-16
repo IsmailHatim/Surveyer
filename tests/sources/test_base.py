@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import httpx
 
-from surveyer.sources.base import HttpClient
+from surveyer.sources.base import HttpClient, dequote_terms
+
+
+def test_dequote_terms_strips_quotes_and_collapses_whitespace():
+    assert dequote_terms('"graph neural network" survey') == "graph neural network survey"
+
+
+def test_dequote_terms_noop_on_unquoted():
+    assert dequote_terms("graph survey") == "graph survey"
 
 
 def test_http_client_caches(tmp_path):

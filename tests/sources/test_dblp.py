@@ -52,6 +52,18 @@ def test_dblp_search_uses_primary_when_healthy(tmp_path):
     assert hosts == ["dblp.org"]
 
 
+def test_dblp_search_dequotes_phrase_terms(tmp_path):
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params["q"])
+        return httpx.Response(200, json=_HIT)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    DblpSource(client).search('"graph neural network" survey', max_results=10)
+    assert seen == ["graph neural network survey"]
+
+
 def test_parse_dblp_captures_key():
     raw = {
         "result": {

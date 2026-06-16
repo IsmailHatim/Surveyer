@@ -34,6 +34,11 @@ def _parse_retry_after(value: str) -> float | None:
     return max(0.0, (when - datetime.now(UTC)).total_seconds())
 
 
+def dequote_terms(terms: str) -> str:
+    """Strip double-quote phrase grouping for APIs without a phrase operator."""
+    return " ".join(terms.replace('"', " ").split())
+
+
 class Source(Protocol):
     """A bibliographic source adapter."""
 
