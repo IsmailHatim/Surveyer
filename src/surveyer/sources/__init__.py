@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import structlog
 
 from surveyer.cancel import check_cancelled
-from surveyer.config import SearchConfig
+from surveyer.config import Query, SearchConfig
 from surveyer.models import Record
 from surveyer.sources.agent import AgentSource
 from surveyer.sources.base import HttpClient, Source
@@ -70,43 +71,64 @@ def build_registry(
     return registry
 
 
+def _fetch_one_source(
+    name: str,
+    source: Source,
+    queries: list[Query],
+    max_results: int,
+    cancel: threading.Event | None,
+) -> tuple[list[Record], int, bool]:
+    """Run all queries for a single source. Returns (records, count, had_error)."""
+    out: list[Record] = []
+    had_error = False
+    for query in queries:
+        check_cancelled(cancel)
+        try:
+            hits = source.search(query.terms, max_results=max_results)
+        except Exception as exc:
+            log.warning("source.failed", source=name, query=query.label, error=str(exc))
+            had_error = True
+            continue
+        for r in hits:
+            r.sources = [name]
+            r.query_labels = [query.label]
+        out.extend(hits)
+        log.info("fetch.query_done", source=name, query=query.label, hits=len(hits))
+    log.info("fetch.source_done", source=name, count=len(out))
+    return out, len(out), had_error
+
+
 def fetch_all(
     search: SearchConfig,
     registry: dict[str, Source],
     *,
     cancel: threading.Event | None = None,
 ) -> tuple[list[Record], dict[str, int], list[str]]:
-    """Run every (source, query) pair, tagging provenance.
-
-    Returns (records, per-source counts, failed source names).
-    """
+    """Run every (source, query) pair concurrently across sources."""
     records: list[Record] = []
     counts: dict[str, int] = {}
     failed: list[str] = []
+    if not registry:
+        return records, counts, failed
     queries = search.resolved_queries()
-    for name, source in registry.items():
-        n = 0
-        had_error = False
-        for query in queries:
-            check_cancelled(cancel)
-            try:
-                hits = source.search(
-                    query.terms, max_results=search.max_results_per_query
-                )
-            except Exception as exc:
-                log.warning(
-                    "source.failed", source=name, query=query.label, error=str(exc)
-                )
-                had_error = True
-                continue
-            for r in hits:
-                r.sources = [name]
-                r.query_labels = [query.label]
-            records.extend(hits)
-            n += len(hits)
-            log.info("fetch.query_done", source=name, query=query.label, hits=len(hits))
-        counts[name] = n
-        log.info("fetch.source_done", source=name, count=n)
-        if had_error:
-            failed.append(name)
+
+    with ThreadPoolExecutor(max_workers=len(registry)) as pool:
+        futures = {
+            name: pool.submit(
+                _fetch_one_source,
+                name,
+                source,
+                queries,
+                search.max_results_per_query,
+                cancel,
+            )
+            for name, source in registry.items()
+        }
+        # Resolve in registry order so records, counts and failed are deterministic.
+        for name in registry:
+            recs, count, had_error = futures[name].result()
+            records.extend(recs)
+            counts[name] = count
+            if had_error:
+                failed.append(name)
     return records, counts, failed

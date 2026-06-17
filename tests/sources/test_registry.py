@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 import pytest
 import structlog
@@ -154,3 +155,29 @@ def test_fetch_all_cancel_mid_loop():
         fetch_all(search, {"src": source}, cancel=event)
     # First query ran; the check at the top of the 2nd iteration raised.
     assert source.calls == 1
+
+
+def test_fetch_all_preserves_registry_order_under_concurrency():
+    class SlowSource:
+        def __init__(self, delay, title):
+            self.delay = delay
+            self.title = title
+
+        def search(self, terms, *, max_results):
+            time.sleep(self.delay)
+            return [Record(title=self.title)]
+
+    search = SearchConfig(
+        sources=["slow", "fast"],
+        queries=[Query(label="A", terms="x")],
+        max_results_per_query=10,
+    )
+    # "slow" finishes last but must still appear first (registry order).
+    registry = {
+        "slow": SlowSource(0.05, "SLOW"),
+        "fast": SlowSource(0.0, "FAST"),
+    }
+    records, counts, failed = fetch_all(search, registry)
+    assert [r.title for r in records] == ["SLOW", "FAST"]
+    assert counts == {"slow": 1, "fast": 1}
+    assert failed == []
