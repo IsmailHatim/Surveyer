@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from surveyer.dedup import deduplicate, normalize_title
+import random
+
+from rapidfuzz import fuzz
+
+from surveyer.dedup import (
+    _is_weak_doi,
+    _merge,
+    deduplicate,
+    normalize_title,
+)
 from surveyer.models import Record
 
 
@@ -150,3 +159,90 @@ def test_dedup_backfills_dblp_key():
     deduped, removed = deduplicate(records)
     assert removed == 1
     assert deduped[0].dblp_key == "conf/abc/Foo24"
+
+
+# Equivalence test for the vectorized deduplicate rewrite
+
+
+def _brute_dedup(records, *, title_threshold=90):
+    """Pure-Python replica of the original O(n^2) algorithm (oracle)."""
+    kept = []  # list[tuple[Record, str]]
+    by_doi = {}
+    removed = 0
+    for r in records:
+        doi = r.doi.lower().strip() if r.doi else None
+        if doi and doi in by_doi:
+            _merge(by_doi[doi], r)
+            removed += 1
+            continue
+        norm = normalize_title(r.title)
+        match = None
+        if norm:
+            for existing, ex_norm in kept:
+                ex_doi = existing.doi.lower().strip() if existing.doi else None
+                if (
+                    doi
+                    and ex_doi
+                    and ex_doi != doi
+                    and not (_is_weak_doi(doi) or _is_weak_doi(ex_doi))
+                ):
+                    continue
+                if fuzz.token_sort_ratio(norm, ex_norm) >= title_threshold:
+                    match = existing
+                    break
+        if match is not None:
+            _merge(match, r)
+            removed += 1
+            if match.doi:
+                by_doi[match.doi.lower().strip()] = match
+            if doi:
+                by_doi[doi] = match
+            continue
+        kept.append((r, norm))
+        if doi:
+            by_doi[doi] = r
+    return [rec for rec, _ in kept], removed
+
+
+def _random_corpus(n, seed):
+    rng = random.Random(seed)
+    stems = [
+        "deep learning for security",
+        "graph neural networks",
+        "secure aggregation",
+        "federated averaging methods",
+        "differential privacy survey",
+    ]
+    recs = []
+    for i in range(n):
+        if recs and rng.random() < 0.3:
+            t = rng.choice(stems)
+            if rng.random() < 0.5:
+                t = t.title() + "."
+        else:
+            t = rng.choice(stems) + f" variant {i}"
+        if rng.random() < 0.15:
+            t = ""  # exercise empty-title path
+        doi = None
+        roll = rng.random()
+        if roll < 0.3:
+            doi = f"10.1/x{i % 7}"  # collisions + conflicts
+        elif roll < 0.4:
+            doi = f"10.48550/arXiv.{i}"  # weak DOI
+        recs.append(Record(title=t, doi=doi, sources=[f"s{i % 3}"]))
+    return recs
+
+
+def test_dedup_matches_brute_force_oracle():
+    for seed in range(25):
+        corpus = _random_corpus(40, seed)
+        oracle = _brute_dedup(
+            [Record(title=r.title, doi=r.doi, sources=list(r.sources)) for r in corpus],
+            title_threshold=90,
+        )
+        actual = deduplicate(
+            [Record(title=r.title, doi=r.doi, sources=list(r.sources)) for r in corpus],
+            title_threshold=90,
+        )
+        assert [r.title for r in actual[0]] == [r.title for r in oracle[0]], seed
+        assert actual[1] == oracle[1], seed
