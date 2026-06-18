@@ -35,7 +35,7 @@ class FakeSource:
 
 
 class FakeScorer:
-    def score(self, survey_abstract, record):
+    def score(self, survey_abstract, record, *, concepts=None):
         return (0.9, "ok") if "relevant" in (record.abstract or "") else (0.1, "no")
 
 
@@ -213,7 +213,7 @@ def test_extend_pipeline_never_rescores_baseline(tmp_path):
         def __init__(self):
             self.seen = []
 
-        def score(self, survey_abstract, record):
+        def score(self, survey_abstract, record, *, concepts=None):
             self.seen.append(record.title)
             return (0.9, "ok")
 
@@ -291,7 +291,7 @@ def test_run_pipeline_cancel_during_llm(tmp_path):
     event = threading.Event()
 
     class CancelScorer:
-        def score(self, survey_abstract, record):
+        def score(self, survey_abstract, record, *, concepts=None):
             event.set()  # trip cancel as soon as the LLM stage starts
             return 0.9, "ok"
 

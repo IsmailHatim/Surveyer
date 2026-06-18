@@ -17,18 +17,69 @@ from surveyer.models import Record
 
 log = structlog.get_logger()
 
-_PROMPT = (
-    "You score how relevant a candidate paper is to a survey.\n"
-    "Survey abstract:\n{survey}\n\n"
-    "Candidate paper:\nTitle: {title}\nAbstract: {abstract}\n\n"
-    'Return JSON: {{"score": <float 0..1>, "reason": <short string>}}.'
+_SYSTEM = (
+    "You score how relevant a candidate paper is to an academic survey, "
+    "on a 0..1 scale.\n"
+    "Use this anchored scale (judge the concept criteria first, "
+    "then map to the closest anchor):\n"
+    "  1.0  - all concepts strongly addressed (the survey's core question)\n"
+    "  0.85 - all concepts addressed, one only partially\n"
+    "  0.7  - two concepts solid, the third weak/partial\n"
+    "  0.6  - two concepts solid, the third absent\n"
+    "  0.5  - partially relevant overall\n"
+    "  0.25 - tangential; mentions the area only in passing\n"
+    "  0.0  - unrelated\n"
+    "When concept criteria are given, first judge each concept as "
+    '"yes", "partial", or "no", then derive the overall score from that '
+    "assessment.\n"
+    'Return ONLY JSON: {"concepts": {<name>: "yes|partial|no"}, '
+    '"score": <float 0..1>, "reason": <short string>}. '
+    'If no concept criteria are given, return an empty object for "concepts".'
 )
+
+
+def _render_user_prompt(
+    survey_abstract: str,
+    record: Record,
+    concepts: dict[str, list[str]] | None,
+) -> str:
+    """Build the per-paper user message for the scorer."""
+    parts = ["Survey abstract:", survey_abstract, ""]
+    if concepts:
+        parts.append("Concept criteria (the survey must address each concept):")
+        parts.extend(f"- {name}: {', '.join(syns)}" for name, syns in concepts.items())
+        parts.append("")
+    parts += [
+        "Candidate paper:",
+        f"Title: {record.title}",
+        f"Abstract: {record.abstract or '(no abstract)'}",
+    ]
+    return "\n".join(parts)
+
+
+def _parse_response(data: dict) -> tuple[float, str]:
+    """Extract (score, reason) from a scorer JSON payload."""
+    score = data.get("score")
+    if not isinstance(score, (int, float)):
+        raise ValueError(f"LLM response missing numeric score: {data!r}")
+    reason = str(data.get("reason", ""))
+    concepts = data.get("concepts")
+    if isinstance(concepts, dict) and concepts:
+        verdicts = ", ".join(f"{name}:{verdict}" for name, verdict in concepts.items())
+        reason = f"{verdicts} — {reason}" if reason else verdicts
+    return float(score), reason
 
 
 class Scorer(Protocol):
     """Protocol for LLM relevance scorers."""
 
-    def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
+    def score(
+        self,
+        survey_abstract: str,
+        record: Record,
+        *,
+        concepts: dict[str, list[str]] | None = None,
+    ) -> tuple[float, str]:
         """Return (score 0..1, reason) for a candidate record against the survey."""
         ...
 
@@ -50,27 +101,30 @@ class OpenAIScorer:
         self.model = model
         self.client = OpenAI(api_key=api_key)
 
-    def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
+    def score(
+        self,
+        survey_abstract: str,
+        record: Record,
+        *,
+        concepts: dict[str, list[str]] | None = None,
+    ) -> tuple[float, str]:
         """Score a record against the survey abstract via the OpenAI chat API."""
-        prompt = _PROMPT.format(
-            survey=survey_abstract,
-            title=record.title,
-            abstract=record.abstract or "(no abstract)",
-        )
         resp = self.client.chat.completions.create(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {
+                    "role": "user",
+                    "content": _render_user_prompt(survey_abstract, record, concepts),
+                },
+            ],
             response_format={"type": "json_object"},
             temperature=0,
         )
         content = resp.choices[0].message.content
         if content is None:
             raise ValueError("LLM response had no content")
-        data = json.loads(content)
-        score = data.get("score")
-        if not isinstance(score, (int, float)):
-            raise ValueError(f"LLM response missing numeric score: {data!r}")
-        return float(score), str(data.get("reason", ""))
+        return _parse_response(json.loads(content))
 
 
 class OllamaScorer:
@@ -90,27 +144,30 @@ class OllamaScorer:
         self.model = model
         self.client = Client(host=host)
 
-    def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
+    def score(
+        self,
+        survey_abstract: str,
+        record: Record,
+        *,
+        concepts: dict[str, list[str]] | None = None,
+    ) -> tuple[float, str]:
         """Score a record against the survey abstract via the Ollama chat API."""
-        prompt = _PROMPT.format(
-            survey=survey_abstract,
-            title=record.title,
-            abstract=record.abstract or "(no abstract)",
-        )
         resp = self.client.chat(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {
+                    "role": "user",
+                    "content": _render_user_prompt(survey_abstract, record, concepts),
+                },
+            ],
             format="json",
             options={"temperature": 0},
         )
         content = resp["message"]["content"]
         if not content:
             raise ValueError("LLM response had no content")
-        data = json.loads(content)
-        score = data.get("score")
-        if not isinstance(score, (int, float)):
-            raise ValueError(f"LLM response missing numeric score: {data!r}")
-        return float(score), str(data.get("reason", ""))
+        return _parse_response(json.loads(content))
 
 
 def build_scorer(cfg: LLMConfig) -> Scorer:
@@ -143,13 +200,19 @@ class CachingScorer:
         digest = hashlib.sha256(key.encode()).hexdigest()[:32]
         return self.cache_dir / f"{digest}.json"
 
-    def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
+    def score(
+        self,
+        survey_abstract: str,
+        record: Record,
+        *,
+        concepts: dict[str, list[str]] | None = None,
+    ) -> tuple[float, str]:
         """Return cached (score, reason) or delegate to inner scorer and cache."""
         cache = self._cache_path(survey_abstract, record)
         if cache.exists():
             data = json.loads(cache.read_text())
             return data["score"], data["reason"]
-        value, reason = self.inner.score(survey_abstract, record)
+        value, reason = self.inner.score(survey_abstract, record, concepts=concepts)
         cache.write_text(json.dumps({"score": value, "reason": reason}))
         return value, reason
 
@@ -159,6 +222,7 @@ def apply_llm_filter(
     cfg: LLMConfig,
     scorer: Scorer,
     *,
+    concepts: dict[str, list[str]] | None = None,
     cancel: threading.Event | None = None,
 ) -> tuple[list[Record], int]:
     """Score each record; keep those above threshold. Returns (kept, excluded)."""
@@ -171,7 +235,7 @@ def apply_llm_filter(
         check_cancelled(cancel)
         log.info("llm.scoring", done=i, total=total, title=r.title)
         try:
-            value, reason = scorer.score(cfg.survey_abstract, r)
+            value, reason = scorer.score(cfg.survey_abstract, r, concepts=concepts)
         except Exception as exc:
             log.warning("llm.score_failed", title=r.title, error=str(exc))
             r.llm_score = None
