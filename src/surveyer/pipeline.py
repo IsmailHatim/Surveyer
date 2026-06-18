@@ -104,7 +104,11 @@ def run_pipeline(
     # 4. LLM filter (scorer was built up front, before fetching)
     if cfg.filter.llm.enabled and scorer is not None:
         after_llm, excluded_llm = apply_llm_filter(
-            after_kw, cfg.filter.llm, scorer, cancel=cancel
+            after_kw,
+            cfg.filter.llm,
+            scorer,
+            concepts=cfg.filter.concepts,
+            cancel=cancel,
         )
     else:
         after_llm, excluded_llm = after_kw, 0
