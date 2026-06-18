@@ -16,7 +16,9 @@ class FakeScorer:
     def __init__(self):
         self.calls = 0
 
-    def score(self, survey_abstract: str, record: Record) -> tuple[float, str]:
+    def score(
+        self, survey_abstract: str, record: Record, *, concepts=None
+    ) -> tuple[float, str]:
         self.calls += 1
         val = 0.9 if record.abstract and "relevant" in record.abstract else 0.1
         return val, "reason"
@@ -76,7 +78,7 @@ def test_disabled_is_passthrough():
 
 def test_unscored_records_kept_on_scorer_error():
     class BoomScorer:
-        def score(self, survey_abstract, record):
+        def score(self, survey_abstract, record, *, concepts=None):
             raise RuntimeError("api down")
 
     cfg = LLMConfig(enabled=True, threshold=0.5, survey_abstract="s")
@@ -95,7 +97,7 @@ def test_caching_scorer_avoids_recompute(tmp_path):
         def __init__(self):
             self.calls = 0
 
-        def score(self, survey_abstract, record):
+        def score(self, survey_abstract, record, *, concepts=None):
             self.calls += 1
             return 0.7, "r"
 
@@ -200,7 +202,7 @@ def test_apply_llm_filter_cancel_after_n_records():
             self.calls = 0
             self.n = n
 
-        def score(self, survey_abstract, record):
+        def score(self, survey_abstract, record, *, concepts=None):
             self.calls += 1
             if self.calls >= self.n:
                 event.set()
@@ -212,3 +214,108 @@ def test_apply_llm_filter_cancel_after_n_records():
     with pytest.raises(PipelineCancelled):
         apply_llm_filter(recs, cfg, scorer, cancel=event)
     assert scorer.calls == 2
+
+
+def test_apply_llm_filter_passes_concepts_to_scorer():
+    class RecordingScorer:
+        def __init__(self):
+            self.seen_concepts = "unset"
+
+        def score(self, survey_abstract, record, *, concepts=None):
+            self.seen_concepts = concepts
+            return 0.9, "ok"
+
+    cfg = LLMConfig(enabled=True, threshold=0.5, survey_abstract="s")
+    scorer = RecordingScorer()
+    apply_llm_filter(
+        [Record(title="x", abstract="y")],
+        cfg,
+        scorer,
+        concepts={"graphs": ["graph"]},
+    )
+    assert scorer.seen_concepts == {"graphs": ["graph"]}
+
+
+def test_render_user_prompt_includes_concepts():
+    from surveyer.filtering.llm import _render_user_prompt
+
+    rec = Record(title="GNN survey", abstract="about graphs")
+    prompt = _render_user_prompt(
+        "my survey abstract",
+        rec,
+        {"graphs": ["graph", "network"], "survey-method": ["survey", "review"]},
+    )
+    assert "my survey abstract" in prompt
+    assert "graphs: graph, network" in prompt
+    assert "survey-method: survey, review" in prompt
+    assert "GNN survey" in prompt
+    assert "about graphs" in prompt
+
+
+def test_render_user_prompt_without_concepts_has_no_concept_block():
+    from surveyer.filtering.llm import _render_user_prompt
+
+    rec = Record(title="T", abstract=None)
+    prompt = _render_user_prompt("survey", rec, None)
+    assert "Concept criteria" not in prompt
+    assert "(no abstract)" in prompt
+
+
+def test_system_prompt_defines_anchored_scale():
+    from surveyer.filtering.llm import _SYSTEM
+
+    for anchor in ("1.0", "0.75", "0.5", "0.25", "0.0"):
+        assert anchor in _SYSTEM
+
+
+def test_parse_response_folds_concept_verdicts_into_reason():
+    from surveyer.filtering.llm import _parse_response
+
+    score, reason = _parse_response(
+        {
+            "concepts": {"graphs": "yes", "survey-method": "no"},
+            "score": 0.4,
+            "reason": "primary study, not a survey",
+        }
+    )
+    assert score == 0.4
+    assert reason == "graphs:yes, survey-method:no — primary study, not a survey"
+
+
+def test_parse_response_without_concepts_keeps_plain_reason():
+    from surveyer.filtering.llm import _parse_response
+
+    score, reason = _parse_response({"concepts": {}, "score": 0.9, "reason": "on topic"})
+    assert score == 0.9
+    assert reason == "on topic"
+
+
+def test_parse_response_raises_on_missing_score():
+    from surveyer.filtering.llm import _parse_response
+
+    with pytest.raises(ValueError, match="score"):
+        _parse_response({"reason": "x"})
+
+
+def test_ollama_scorer_sends_system_message_and_concepts(mocker):
+    from surveyer.filtering.llm import OllamaScorer
+
+    fake_client = mocker.Mock()
+    fake_client.chat.return_value = {
+        "message": {
+            "content": '{"concepts": {"graphs": "yes"}, "score": 0.8, "reason": "ok"}'
+        }
+    }
+    mocker.patch("ollama.Client", return_value=fake_client)
+
+    scorer = OllamaScorer()
+    score, reason = scorer.score(
+        "survey", Record(title="T", abstract="A"), concepts={"graphs": ["graph"]}
+    )
+
+    assert score == 0.8
+    assert reason == "graphs:yes — ok"
+    messages = fake_client.chat.call_args.kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert "anchored scale" in messages[0]["content"].lower() or "1.0" in messages[0]["content"]
+    assert "graphs: graph" in messages[1]["content"]
