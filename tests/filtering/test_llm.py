@@ -264,7 +264,7 @@ def test_render_user_prompt_without_concepts_has_no_concept_block():
 def test_system_prompt_defines_anchored_scale():
     from surveyer.filtering.llm import _SYSTEM
 
-    for anchor in ("1.0", "0.75", "0.5", "0.25", "0.0"):
+    for anchor in ("1.0", "0.85", "0.7", "0.6", "0.5", "0.25", "0.0"):
         assert anchor in _SYSTEM
 
 
