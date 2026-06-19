@@ -157,6 +157,22 @@ def test_fetch_all_cancel_mid_loop():
     assert source.calls == 1
 
 
+def test_build_registry_includes_pubmed(tmp_path):
+    from surveyer.sources.pubmed import PubMedSource
+
+    search = SearchConfig(
+        sources=["pubmed"],
+        queries=[Query(label="A", terms="x")],
+        year_min=2010,
+        year_max=2020,
+        max_results_per_query=10,
+    )
+    registry = build_registry(search, tmp_path)
+    assert isinstance(registry["pubmed"], PubMedSource)
+    assert registry["pubmed"].year_min == 2010
+    assert registry["pubmed"].year_max == 2020
+
+
 def test_fetch_all_preserves_registry_order_under_concurrency():
     class SlowSource:
         def __init__(self, delay, title):

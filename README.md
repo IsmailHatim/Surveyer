@@ -93,6 +93,7 @@ Set credentials in your environment:
 ```bash
 export OPENAI_API_KEY=sk-...
 export SEMANTIC_SCHOLAR_API_KEY=...   # strongly recommended
+export NCBI_API_KEY=...               # strongly recommended for PubMed's papers
 ```
 
 Or keep them in the `.env` file and load it automatically:
@@ -162,6 +163,7 @@ BibTeX is backfilled, and the PRISMA diagram switches to the 2020 review-update 
 | DBLP              | no      | CS bibliography                         |
 | OpenAlex          | no      | broad coverage, abstracts               |
 | Semantic Scholar  | recommended | abstracts, citations                |
+| PubMed            | recommended | biomedical and MEDLINE; abstracts + MeSH keywords |
 | Google Scholar    | no      | optional extra; fragile, off by default |
 | Agent web search  | -       | TODO                                    |
 

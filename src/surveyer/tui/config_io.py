@@ -19,8 +19,14 @@ from surveyer.config import (
     load_config,
 )
 
-#: Sources shown as checkboxes in the dashboard.
-TOGGLEABLE_SOURCES = ("dblp", "openalex", "semantic_scholar", "google_scholar")
+# Sources shown as checkboxes in the dashboard.
+TOGGLEABLE_SOURCES = (
+    "dblp",
+    "openalex",
+    "semantic_scholar",
+    "pubmed",
+    "google_scholar",
+)
 
 assert set(TOGGLEABLE_SOURCES) <= VALID_SOURCES, (
     "TOGGLEABLE_SOURCES contains unknown sources; update VALID_SOURCES in config.py"

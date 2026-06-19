@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -16,6 +17,7 @@ from surveyer.sources.base import HttpClient, Source
 from surveyer.sources.dblp import DblpSource
 from surveyer.sources.google_scholar import GoogleScholarSource
 from surveyer.sources.openalex import OpenAlexSource
+from surveyer.sources.pubmed import PubMedSource
 from surveyer.sources.semantic_scholar import SemanticScholarSource, make_headers
 
 log = structlog.get_logger()
@@ -64,6 +66,19 @@ def build_registry(
             )
         elif name == "google_scholar":
             registry[name] = GoogleScholarSource()
+        elif name == "pubmed":
+            # NCBI: 3 req/s without a key and 10 with NCBI_API_KEY
+            has_key = bool(os.environ.get("NCBI_API_KEY"))
+            log.info("pubmed.auth", api_key="present" if has_key else "absent")
+            registry[name] = PubMedSource(
+                HttpClient(
+                    cache_dir=cache / "pubmed",
+                    min_interval=0.11 if has_key else 0.4,
+                    refresh=refresh,
+                ),
+                year_min=search.year_min,
+                year_max=search.year_max,
+            )
         elif name == "agent":
             registry[name] = AgentSource()
         else:

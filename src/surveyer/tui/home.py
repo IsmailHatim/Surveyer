@@ -12,7 +12,7 @@ from surveyer.tui.logo import LOGO
 _TAGLINE = "reproducible literature search for academic surveys"
 
 _STEPS = """\
-[b $accent]1[/]  [b]Fetch   [/]query DBLP, OpenAlex, Semantic Scholar, Google Scholar
+[b $accent]1[/]  [b]Fetch   [/]DBLP, OpenAlex, Semantic Scholar, PubMed, Google Scholar
 [b $accent]2[/]  [b]Dedup   [/]merge duplicates by DOI and title match
 [b $accent]3[/]  [b]Filter  [/]keyword concepts and optional LLM relevance scoring
 [b $accent]4[/]  [b]BibTeX  [/]resolve citations: DBLP key, then DOI, then local

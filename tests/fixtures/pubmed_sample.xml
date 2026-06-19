@@ -1,0 +1,71 @@
+<?xml version="1.0" ?>
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation Status="MEDLINE">
+      <PMID Version="1">12345678</PMID>
+      <Article PubModel="Print">
+        <Journal>
+          <Title>Journal of Graph Methods</Title>
+          <ISOAbbreviation>J Graph Methods</ISOAbbreviation>
+          <JournalIssue>
+            <PubDate>
+              <Year>2021</Year>
+              <Month>Jun</Month>
+            </PubDate>
+          </JournalIssue>
+        </Journal>
+        <ArticleTitle>Graph neural networks for protein folding.</ArticleTitle>
+        <Abstract>
+          <AbstractText Label="BACKGROUND">We study folding.</AbstractText>
+          <AbstractText Label="RESULTS">It works well.</AbstractText>
+        </Abstract>
+        <AuthorList>
+          <Author>
+            <LastName>Smith</LastName>
+            <ForeName>Alice</ForeName>
+            <Initials>A</Initials>
+          </Author>
+          <Author>
+            <LastName>Jones</LastName>
+            <ForeName>Bob</ForeName>
+          </Author>
+        </AuthorList>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading>
+          <DescriptorName UI="D000465">Algorithms</DescriptorName>
+        </MeshHeading>
+        <MeshHeading>
+          <DescriptorName UI="D016571">Neural Networks, Computer</DescriptorName>
+        </MeshHeading>
+      </MeshHeadingList>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">12345678</ArticleId>
+        <ArticleId IdType="doi">10.1000/jgm.2021.001</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+  <PubmedArticle>
+    <MedlineCitation Status="MEDLINE">
+      <PMID Version="1">99999999</PMID>
+      <Article PubModel="Print">
+        <Journal>
+          <Title>Old Journal</Title>
+          <JournalIssue>
+            <PubDate>
+              <MedlineDate>2008 Spring</MedlineDate>
+            </PubDate>
+          </JournalIssue>
+        </Journal>
+        <ArticleTitle>A sparse record.</ArticleTitle>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">99999999</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>
