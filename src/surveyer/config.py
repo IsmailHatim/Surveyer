@@ -18,6 +18,7 @@ VALID_SOURCES = {
     "openalex",
     "semantic_scholar",
     "google_scholar",
+    "pubmed",
     "agent",
 }
 
