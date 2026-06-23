@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from surveyer.config import Query, SearchConfig
-from surveyer.models import Ledger, SourceCount
-from surveyer.prisma.model import build_model
+from surveyer.models import Ledger, QueryRetrieval, SourceCount
+from surveyer.prisma.model import _build_completeness, build_model
 
 
 def _ledger() -> Ledger:
@@ -131,3 +131,79 @@ def test_build_model_without_extend_is_unchanged():
     assert rows["included"].title == "Studies included"
     assert rows["dedup"].exclusion.label == "Duplicates removed"
     assert model.previous_included is None
+
+
+def _completeness_ledger() -> Ledger:
+    return Ledger(
+        identified=[
+            SourceCount(source="openalex", count=280),
+            SourceCount(source="dblp", count=5),
+        ],
+        retrieval=[
+            QueryRetrieval(source="openalex", query_label="q1", requested=100,
+                           retrieved=100, api_total=5000),   # truncated
+            QueryRetrieval(source="openalex", query_label="q2", requested=100,
+                           retrieved=180, api_total=4100),   # truncated
+            QueryRetrieval(source="dblp", query_label="q1", requested=100,
+                           retrieved=5, api_total=5),         # complete
+        ],
+        included=1,
+    )
+
+
+def test_build_completeness_aggregation():
+    by_src = {c.source: c for c in _build_completeness(_completeness_ledger())}
+    oa = by_src["openalex"]
+    assert oa.requested == 100               # per-query cap, shown as-is
+    assert oa.retrieved == 280               # summed across queries
+    assert oa.api_total == 9100              # summed
+    assert oa.truncated is True
+    assert oa.partial_total is False
+    db = by_src["dblp"]
+    assert db.retrieved == 5
+    assert db.api_total == 5
+    assert db.truncated is False
+
+
+def test_build_completeness_partial_total():
+    led = Ledger(
+        retrieval=[
+            QueryRetrieval(source="s2", query_label="q1", requested=50,
+                           retrieved=50, api_total=900),
+            QueryRetrieval(source="s2", query_label="q2", requested=50,
+                           retrieved=10, api_total=None),   # unknown
+        ]
+    )
+    [c] = _build_completeness(led)
+    assert c.api_total == 900
+    assert c.partial_total is True
+    assert c.truncated is True
+
+
+def test_build_completeness_all_unknown_total():
+    led = Ledger(
+        retrieval=[
+            QueryRetrieval(source="gscholar", query_label="q1", requested=20,
+                           retrieved=20, api_total=None),
+        ]
+    )
+    [c] = _build_completeness(led)
+    assert c.api_total is None
+    assert c.partial_total is False
+    assert c.truncated is False
+
+
+def test_build_completeness_empty_when_no_retrieval():
+    assert _build_completeness(_ledger()) == []  # _ledger() has no retrieval rows
+
+
+def test_build_model_completeness_off_by_default():
+    # Hardcoded off: build_model omits the table even with retrieval present.
+    m = build_model(_completeness_ledger(), _search())
+    assert m.source_completeness == []
+
+
+def test_build_model_completeness_on_when_toggled(monkeypatch):
+    monkeypatch.setattr("surveyer.prisma.model.SHOW_COMPLETENESS_TABLE", True)
+    m = build_model(_completeness_ledger(), _search())
+    assert [c.source for c in m.source_completeness] == ["openalex", "dblp"]

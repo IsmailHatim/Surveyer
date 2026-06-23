@@ -32,7 +32,7 @@ def test_dblp_search_falls_back_to_mirror_and_sticks(tmp_path):
     source = DblpSource(client)
 
     first = source.search("q1", max_results=10)
-    assert [r.title for r in first] == ["Mirror paper"]
+    assert [r.title for r in first.records] == ["Mirror paper"]
     assert calls["primary"] == 2  # retries exhausted once, then switched
 
     source.search("q2", max_results=10)
@@ -96,3 +96,15 @@ def test_parse_dblp(fixtures_dir):
     assert r.doi == "10.5555/3295222.3295349"
     assert r.venue == "NeurIPS"
     assert r.url == "https://arxiv.org/abs/1706.03762"
+
+
+def test_dblp_search_returns_api_total(tmp_path):
+    raw = {"result": {"hits": {"@total": "47", "hit": [{"info": {"title": "P"}}]}}}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=raw)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    result = DblpSource(client).search("x", max_results=10)
+    assert result.api_total == 47
+    assert [r.title for r in result.records] == ["P"]

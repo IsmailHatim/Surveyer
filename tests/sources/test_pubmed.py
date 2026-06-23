@@ -65,8 +65,8 @@ def test_pubmed_search_two_step_flow(tmp_path, fixtures_dir):
         return httpx.Response(200, text=xml_text)
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = PubMedSource(client).search("graph", max_results=10)
-    assert [r.title for r in records] == [
+    result = PubMedSource(client).search("graph", max_results=10)
+    assert [r.title for r in result.records] == [
         "Graph neural networks for protein folding",
         "A sparse record",
     ]
@@ -82,8 +82,8 @@ def test_pubmed_search_empty_skips_efetch(tmp_path):
         return httpx.Response(200, text="<PubmedArticleSet/>")
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = PubMedSource(client).search("graph", max_results=10)
-    assert records == []
+    result = PubMedSource(client).search("graph", max_results=10)
+    assert result.records == []
     assert efetch_calls == []
 
 
@@ -131,8 +131,8 @@ def test_pubmed_search_paginates_and_batches(tmp_path):
         return httpx.Response(200, text=f"<PubmedArticleSet>{body}</PubmedArticleSet>")
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = PubMedSource(client).search("x", max_results=250)
-    assert len(records) == 250
+    result = PubMedSource(client).search("x", max_results=250)
+    assert len(result.records) == 250
 
 
 def test_parse_pubmed_title_preserves_inline_markup():
@@ -143,3 +143,19 @@ def test_parse_pubmed_title_preserves_inline_markup():
     )
     r = parse_pubmed(xml)[0]
     assert r.title == "Effects of E. coli on growth"
+
+
+def test_pubmed_search_returns_api_total(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _is_esearch(request):
+            return httpx.Response(
+                200, json={"esearchresult": {"count": "874", "idlist": ["1"]}}
+            )
+        return httpx.Response(
+            200, text=f"<PubmedArticleSet>{_MINIMAL_ARTICLE}</PubmedArticleSet>"
+        )
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    result = PubMedSource(client).search("x", max_results=10)
+    assert result.api_total == 874
+    assert len(result.records) == 1

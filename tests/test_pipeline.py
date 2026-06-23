@@ -19,7 +19,7 @@ from surveyer.config import (
 from surveyer.export import export_xlsx
 from surveyer.ledger import load_ledger
 from surveyer.models import Ledger as LedgerModel
-from surveyer.models import Record
+from surveyer.models import Record, SearchResult
 from surveyer.pipeline import run_pipeline
 
 
@@ -27,11 +27,13 @@ class FakeSource:
     name = "fake"
 
     def search(self, terms, *, max_results):
-        return [
-            Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
-            Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
-            Record(title="Off topic cooking", abstract="recipes", doi="10.1/b"),
-        ]
+        return SearchResult(
+            records=[
+                Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
+                Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
+                Record(title="Off topic cooking", abstract="recipes", doi="10.1/b"),
+            ]
+        )
 
 
 class FakeScorer:
@@ -201,13 +203,15 @@ def test_extend_pipeline_never_rescores_baseline(tmp_path):
         name = "fake"
 
         def search(self, terms, *, max_results):
-            return [
-                Record(
-                    title="Fresh security paper", abstract="relevant", doi="10.1/new"
-                ),
-                # Same DOI as the baseline's kept paper: already screened.
-                Record(title="Old security paper", abstract="relevant", doi="10.1/old"),
-            ]
+            return SearchResult(
+                records=[
+                    Record(
+                        title="Fresh security paper", abstract="relevant", doi="10.1/new"
+                    ),
+                    # Same DOI as the baseline's kept paper: already screened.
+                    Record(title="Old security paper", abstract="relevant", doi="10.1/old"),
+                ]
+            )
 
     class RecordingScorer:
         def __init__(self):
@@ -306,3 +310,14 @@ def test_run_pipeline_cancel_during_llm(tmp_path):
         )
     assert not (tmp_path / "ledger.json").exists()
     assert not (tmp_path / "survey.xlsx").exists()
+
+
+def test_run_pipeline_records_retrieval(tmp_path):
+    cfg = _cfg(tmp_path)
+    result = run_pipeline(
+        cfg, registry={"fake": FakeSource()}, scorer=FakeScorer(), resolve_bibtex=False
+    )
+    assert [qr.source for qr in result.ledger.retrieval] == ["fake"]
+    assert result.ledger.retrieval[0].retrieved == 3
+    led = load_ledger(tmp_path / "ledger.json")
+    assert led.retrieval[0].source == "fake"

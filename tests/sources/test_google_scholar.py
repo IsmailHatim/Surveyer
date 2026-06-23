@@ -22,3 +22,16 @@ def test_parse_scholar_entry():
     assert r.venue == "ICLR"
     assert r.url == "https://example.org/paper"
     assert r.n_citations == 9000
+
+
+def test_google_scholar_search_api_total_is_none(monkeypatch):
+    import surveyer.sources.google_scholar as gs
+
+    class FakeScholarly:
+        def search_pubs(self, terms):
+            return iter([{"bib": {"title": "P"}}])
+
+    monkeypatch.setattr(gs, "scholarly", FakeScholarly(), raising=False)
+    result = gs.GoogleScholarSource().search("x", max_results=5)
+    assert result.api_total is None
+    assert [r.title for r in result.records] == ["P"]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from surveyer.config import Query, SearchConfig
-from surveyer.models import Ledger, SourceCount
+from surveyer.models import Ledger, QueryRetrieval, SourceCount
 from surveyer.prisma.graphviz_render import to_graphviz
 from surveyer.prisma.model import build_model
 
@@ -54,3 +54,34 @@ def test_graphviz_no_previous_box_for_normal_runs():
     ledger = Ledger(identified=[SourceCount(source="dblp", count=10)], included=4)
     model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
     assert "previous ->" not in to_graphviz(model).source
+
+
+def test_graphviz_includes_completeness_table(monkeypatch):
+    monkeypatch.setattr("surveyer.prisma.model.SHOW_COMPLETENESS_TABLE", True)
+    led = Ledger(
+        identified=[SourceCount(source="openalex", count=280)],
+        retrieval=[
+            QueryRetrieval(
+                source="openalex",
+                query_label="q1",
+                requested=100,
+                retrieved=280,
+                api_total=9100,
+            ),
+        ],
+        included=1,
+    )
+    m = build_model(
+        led,
+        SearchConfig(sources=["openalex"], queries=[Query(label="q1", terms="x")]),
+    )
+    src = to_graphviz(m).source
+    assert "completeness" in src
+    assert "openalex" in src
+    assert "9100" in src
+
+
+def test_graphviz_omits_completeness_when_empty():
+    ledger = Ledger(identified=[SourceCount(source="dblp", count=10)], included=4)
+    model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
+    assert "completeness" not in to_graphviz(model).source

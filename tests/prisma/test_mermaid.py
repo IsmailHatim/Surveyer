@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from surveyer.config import Query, SearchConfig
-from surveyer.models import Ledger, SourceCount
+from surveyer.models import Ledger, QueryRetrieval, SourceCount
 from surveyer.prisma.model import build_model
 from surveyer.prisma.mermaid_render import to_mermaid
 
@@ -60,3 +60,39 @@ def test_mermaid_no_previous_box_for_normal_runs():
     ledger = Ledger(identified=[SourceCount(source="dblp", count=10)], included=4)
     model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
     assert "previous" not in to_mermaid(model)
+
+
+def _completeness_model():
+    led = Ledger(
+        identified=[SourceCount(source="openalex", count=280)],
+        retrieval=[
+            QueryRetrieval(
+                source="openalex",
+                query_label="q1",
+                requested=100,
+                retrieved=280,
+                api_total=9100,
+            ),
+        ],
+        included=1,
+    )
+    return build_model(
+        led, SearchConfig(sources=["openalex"], queries=[Query(label="q1", terms="x")])
+    )
+
+
+def test_mermaid_includes_completeness_table(monkeypatch):
+    monkeypatch.setattr("surveyer.prisma.model.SHOW_COMPLETENESS_TABLE", True)
+    out = to_mermaid(_completeness_model())
+    assert "completeness" in out
+    assert "openalex" in out
+    assert "9100" in out
+    assert "⚠" in out  # truncated marker
+
+
+def test_mermaid_omits_completeness_when_empty():
+    m = build_model(
+        Ledger(included=1),
+        SearchConfig(sources=["x"], queries=[Query(label="q", terms="t")]),
+    )
+    assert "completeness" not in to_mermaid(m)
