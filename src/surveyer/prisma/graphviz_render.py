@@ -140,6 +140,35 @@ def _build(model: PrismaModel, rail_width: float) -> graphviz.Digraph:
             dot.edge(prev, row.id)
         prev = row.id
 
+    snow_prev: str | None = None
+    for row in model.snowball_rows:
+        fill = _FILL_BLUE if row.swimlane == "screening" else _FILL_GREEN
+        dot.node(
+            row.id,
+            _text(row.title, row.count),
+            fillcolor=fill,
+            style="rounded,filled",
+            group="snowspine",
+        )
+        if row.exclusion is not None:
+            eid = f"{row.id}_excl"
+            dot.node(eid, _exclusion_text(row.exclusion), fillcolor=_FILL_RED)
+            with dot.subgraph() as s:
+                s.attr(rank="same")
+                s.node(row.id)
+                s.node(eid)
+            dot.edge(row.id, eid)
+        if snow_prev is not None:
+            dot.edge(snow_prev, row.id)
+        snow_prev = row.id
+    if model.snowball_rows:
+        # Keep the two arms side by side, then converge on the shared total box.
+        with dot.subgraph() as s:
+            s.attr(rank="same")
+            s.node("identified")
+            s.node("snow_identified")
+        dot.edge(model.snowball_rows[-1].id, "total")
+
     if model.previous_included is not None:
         dot.node(
             "previous",
