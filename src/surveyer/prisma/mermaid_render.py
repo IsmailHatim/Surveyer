@@ -52,4 +52,25 @@ def to_mermaid(model: PrismaModel) -> str:
         lines.append(f'    query["Search query<br/>{panel}"]')
         lines.append(f"    query -.-> {first}")
 
+    lines += _completeness_lines(model)
+
     return "\n".join(lines) + "\n"
+
+
+def _completeness_lines(model: PrismaModel) -> list[str]:
+    """A single node summarising per-source retrieved / API-total + truncation."""
+    if not model.source_completeness:
+        return []
+    parts = ["Search completeness", "source · req/query · retrieved · API total"]
+    truncated = False
+    for c in model.source_completeness:
+        total = "n/a" if c.api_total is None else str(c.api_total)
+        if c.partial_total:
+            total += "*"
+        flag = " ⚠️" if c.truncated else ""
+        truncated = truncated or c.truncated
+        parts.append(f"{c.source} · {c.requested} · {c.retrieved} · {total}{flag}")
+    if truncated:
+        parts.append("⚠️ retrieved fewer than the database reports — search capped")
+    body = "<br/>".join(parts)
+    return [f'    completeness["{body}"]', f"    {model.rows[-1].id} -.-> completeness"]
