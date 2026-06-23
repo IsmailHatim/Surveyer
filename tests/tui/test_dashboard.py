@@ -381,3 +381,32 @@ async def test_copy_from_search_mirrors_into_filter(seed_config_file):
         assert [c.name for c in filter_items] == ["federated", "privacy"]
         assert filter_items[0].synonyms == ["federated learning", "federated averaging"]
         assert filter_items[1].synonyms == ["differential privacy"]
+
+
+async def test_save_writes_snowball(config_file):
+    app = SurveyerApp(config_file)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        app.screen.query_one("#snowball_enabled").value = True
+        app.screen.query_one("#snowball_direction").value = "backward"
+        app.screen.action_save()
+        await pilot.pause()
+    text = config_file.read_text()
+    assert "[snowball]" in text
+    assert "enabled = true" in text
+    assert 'direction = "backward"' in text
+
+
+def test_prisma_text_includes_snowball():
+    from surveyer.models import Ledger, SnowballLedger, SourceCount
+    from surveyer.tui.dashboard import DashboardScreen
+
+    led = Ledger(
+        identified=[SourceCount(source="openalex", count=10)],
+        included=3,
+        snowball=SnowballLedger(identified=8, included=2),
+    )
+    text = DashboardScreen._prisma_text(led, fetch_only=False, output_dir="out")
+    assert "citation-search identified" in text
+    assert "citation-search included" in text
+    assert "included (total)" in text  # = 3 + 2

@@ -96,3 +96,33 @@ def test_mermaid_omits_completeness_when_empty():
         SearchConfig(sources=["x"], queries=[Query(label="q", terms="t")]),
     )
     assert "completeness" not in to_mermaid(m)
+
+
+def _snowball_model():
+    from surveyer.models import SnowballLedger
+
+    led = Ledger(
+        identified=[SourceCount(source="openalex", count=10)],
+        duplicates_removed=2,
+        excluded_keyword=1,
+        excluded_llm=1,
+        included=3,
+        snowball=SnowballLedger(
+            identified=8,
+            backward=6,
+            forward=2,
+            duplicates_removed=2,
+            excluded_keyword=1,
+            excluded_llm=1,
+            included=2,
+        ),
+    )
+    return build_model(led, SearchConfig(sources=["openalex"], queries=[]),
+                       llm_model="gpt-4o-mini")
+
+
+def test_mermaid_renders_snowball_arm():
+    text = to_mermaid(_snowball_model())
+    assert "Records identified via citation searching" in text
+    assert "snow_identified" in text
+    assert "snow_included --> total" in text

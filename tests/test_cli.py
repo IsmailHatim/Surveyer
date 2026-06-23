@@ -271,3 +271,22 @@ def test_extend_command_reports_counts(tmp_path, monkeypatch):
     assert "5" in result.output  # carried over
     assert "3" in result.output  # already screened
     assert "9" in result.output  # total included
+
+
+def test_snowball_requires_config_section(tmp_path):
+    from typer.testing import CliRunner
+
+    from surveyer.cli import app
+
+    cfg = tmp_path / "s.toml"
+    cfg.write_text(
+        '[project]\nname = "t"\noutput_dir = "%s"\n'
+        '[search]\nsources = ["openalex"]\nqueries = []\n' % (tmp_path / "out")
+    )
+    papers = tmp_path / "survey.xlsx"
+    papers.write_text("")  # not opened: command exits before reading it
+    result = CliRunner().invoke(
+        app, ["snowball", "-c", str(cfg), "--papers", str(papers)]
+    )
+    assert result.exit_code == 1
+    assert "[snowball]" in result.output

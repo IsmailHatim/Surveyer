@@ -85,3 +85,33 @@ def test_graphviz_omits_completeness_when_empty():
     ledger = Ledger(identified=[SourceCount(source="dblp", count=10)], included=4)
     model = build_model(ledger, SearchConfig(sources=["dblp"], queries=[]))
     assert "completeness" not in to_graphviz(model).source
+
+
+def _snowball_model():
+    from surveyer.models import SnowballLedger
+
+    led = Ledger(
+        identified=[SourceCount(source="openalex", count=10)],
+        duplicates_removed=2,
+        excluded_keyword=1,
+        excluded_llm=1,
+        included=3,
+        snowball=SnowballLedger(
+            identified=8,
+            backward=6,
+            forward=2,
+            duplicates_removed=2,
+            excluded_keyword=1,
+            excluded_llm=1,
+            included=2,
+        ),
+    )
+    return build_model(led, SearchConfig(sources=["openalex"], queries=[]),
+                       llm_model="gpt-4o-mini")
+
+
+def test_graphviz_builds_snowball_arm():
+    src = to_graphviz(_snowball_model()).source
+    assert "snow_identified" in src
+    assert "Records identified via citation searching" in src
+    assert "snowspine" in src

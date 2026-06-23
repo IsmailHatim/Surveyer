@@ -321,3 +321,33 @@ def test_named_concept_without_synonyms_is_rejected():
     error = validate_text(tomlkit.dumps(doc))
     assert error is not None
     assert "synonym" in error
+
+
+def test_snowball_defaults_no_section():
+    doc = tomlkit.parse(SAMPLE)
+    v = extract_form(doc)
+    assert v.snowball_enabled is False
+    assert v.snowball_direction == "both"
+    assert v.snowball_max_results_per_seed == 200
+    apply_form(doc, v)
+    # a no-op save must not materialise an empty [snowball] table
+    assert "[snowball]" not in tomlkit.dumps(doc)
+
+
+def test_snowball_enable_roundtrip():
+    doc = tomlkit.parse(SAMPLE)
+    v = extract_form(doc)
+    v.snowball_enabled = True
+    v.snowball_direction = "backward"
+    v.snowball_max_results_per_seed = 50
+    apply_form(doc, v)
+    dumped = tomlkit.dumps(doc)
+    assert "[snowball]" in dumped
+    assert "enabled = true" in dumped
+    assert 'direction = "backward"' in dumped
+    assert "max_results_per_seed = 50" in dumped
+    assert validate_text(dumped) is None
+    back = extract_form(tomlkit.parse(dumped))
+    assert back.snowball_enabled is True
+    assert back.snowball_direction == "backward"
+    assert back.snowball_max_results_per_seed == 50

@@ -371,3 +371,46 @@ def test_export_csv_writes_retrieval(tmp_path):
     text = (tmp_path / "retrieval.csv").read_text()
     assert "source,query_label,requested,retrieved,api_total,truncated" in text
     assert "openalex" in text
+
+
+def test_summary_frame_includes_snowball():
+    from surveyer.export import _summary_frame
+    from surveyer.models import Ledger, SnowballLedger
+
+    led = Ledger(
+        included=3,
+        snowball=SnowballLedger(
+            identified=8, duplicates_removed=2, excluded_keyword=1,
+            excluded_llm=1, included=2,
+        ),
+    )
+    frame = _summary_frame(led)
+    stages = dict(zip(frame["stage"].to_list(), frame["count"].to_list()))
+    assert stages["included"] == 3  # main arm A
+    assert stages["snowball_included"] == 2  # set B
+    assert stages["total_included"] == 5  # A + B (no contradiction with papers sheet)
+
+
+def test_retrieval_frame_includes_snowball_rows():
+    from surveyer.export import _retrieval_frame
+    from surveyer.models import Ledger, QueryRetrieval, SnowballLedger
+
+    led = Ledger(
+        retrieval=[
+            QueryRetrieval(source="openalex", query_label="q", requested=200, retrieved=5)
+        ],
+        snowball=SnowballLedger(
+            retrieval=[
+                QueryRetrieval(
+                    source="openalex",
+                    query_label="snowball:backward",
+                    requested=200,
+                    retrieved=7,
+                )
+            ]
+        ),
+    )
+    frame = _retrieval_frame(led)
+    labels = frame["query_label"].to_list()
+    assert "q" in labels
+    assert "snowball:backward" in labels

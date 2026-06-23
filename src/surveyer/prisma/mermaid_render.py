@@ -40,6 +40,23 @@ def to_mermaid(model: PrismaModel) -> str:
             lines.append(f"    {prev} --> {row.id}")
         prev = row.id
 
+    snow_prev: str | None = None
+    for row in model.snowball_rows:
+        lines.append(f'    {row.id}["{_text(row.title, row.count)}"]')
+        if row.exclusion is not None:
+            eid = f"{row.id}_excl"
+            excl = _text(row.exclusion.label, row.exclusion.count)
+            for reason, n in row.exclusion.breakdown:
+                excl += f"<br/>{reason}: {n}"
+            lines.append(f'    {eid}["{excl}"]')
+            lines.append(f"    {row.id} --> {eid}")
+        if snow_prev is not None:
+            lines.append(f"    {snow_prev} --> {row.id}")
+        snow_prev = row.id
+    if model.snowball_rows:
+        # Converge the citation-searching arm on the shared total box.
+        lines.append(f"    {model.snowball_rows[-1].id} --> total")
+
     if model.previous_included is not None:
         lines.append(
             '    previous["Studies included in previous version of review'

@@ -56,6 +56,7 @@ class PrismaModel(msgspec.Struct, kw_only=True):
     llm_model: str | None = None
     previous_included: int | None = None
     source_completeness: list[SourceCompleteness] = []
+    snowball_rows: list[Row] = []
 
 
 def _build_query_panel(search: SearchConfig) -> str | None:
@@ -104,6 +105,64 @@ def _build_completeness(ledger: Ledger) -> list[SourceCompleteness]:
             )
         )
     return out
+
+
+def _build_snowball_rows(snow, *, llm_model: str | None) -> list[Row]:
+    """Build the citation-searching arm: identified -> dedup -> screened -> included."""
+    after_dedup = snow.identified - snow.duplicates_removed
+    assessed = after_dedup - snow.excluded_keyword
+    keyword_breakdown = sorted(
+        snow.excluded_keyword_reasons.items(), key=lambda kv: kv[1], reverse=True
+    )
+    rows: list[Row] = [
+        Row(
+            id="snow_identified",
+            swimlane="identification",
+            title="Records identified via citation searching",
+            count=snow.identified,
+        ),
+        Row(
+            id="snow_dedup",
+            swimlane="identification",
+            title="Records after duplicates removed",
+            count=after_dedup,
+            exclusion=ExclusionBox(
+                label="Duplicates removed", count=snow.duplicates_removed
+            ),
+        ),
+        Row(
+            id="snow_screened",
+            swimlane="screening",
+            title="Records screened",
+            count=after_dedup,
+            exclusion=ExclusionBox(
+                label="Excluded by keyword filter",
+                count=snow.excluded_keyword,
+                breakdown=keyword_breakdown,
+            ),
+        ),
+    ]
+    if llm_model is not None:
+        rows.append(
+            Row(
+                id="snow_assessed",
+                swimlane="screening",
+                title=f"Records assessed by {llm_model}",
+                count=assessed,
+                exclusion=ExclusionBox(
+                    label="Excluded by relevance score", count=snow.excluded_llm
+                ),
+            )
+        )
+    rows.append(
+        Row(
+            id="snow_included",
+            swimlane="included",
+            title="Studies included via citation searching",
+            count=snow.included,
+        )
+    )
+    return rows
 
 
 def build_model(
@@ -180,12 +239,21 @@ def build_model(
                 dashed=True,
             )
         )
-    if ledger.previously_included:
+    snowball_rows: list[Row] = []
+    if ledger.snowball is not None:
+        snowball_rows = _build_snowball_rows(ledger.snowball, llm_model=llm_model)
+
+    if ledger.previously_included or ledger.snowball is not None:
+        main_label = (
+            "Studies included from databases"
+            if ledger.snowball is not None
+            else "New studies included"
+        )
         rows.append(
             Row(
                 id="included",
                 swimlane="included",
-                title="New studies included",
+                title=main_label,
                 count=ledger.included,
             )
         )
@@ -220,4 +288,5 @@ def build_model(
         source_completeness=(
             _build_completeness(ledger) if SHOW_COMPLETENESS_TABLE else []
         ),
+        snowball_rows=snowball_rows,
     )

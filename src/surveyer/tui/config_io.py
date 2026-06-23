@@ -16,6 +16,7 @@ from surveyer.config import (
     LLMConfig,
     ProjectConfig,
     SearchConfig,
+    SnowballConfig,
     load_config,
 )
 
@@ -37,6 +38,7 @@ _PROJECT_DEFAULTS = ProjectConfig(name="")
 _SEARCH_DEFAULTS = SearchConfig(sources=[], queries=[])
 _DEDUP_DEFAULTS = DedupConfig()
 _LLM_DEFAULTS = LLMConfig()
+_SNOWBALL_DEFAULTS = SnowballConfig()
 
 
 class ConceptItem(msgspec.Struct, kw_only=True):
@@ -65,6 +67,11 @@ class FormValues(msgspec.Struct, kw_only=True):
     llm_host: str = msgspec.field(default=_LLM_DEFAULTS.host)
     llm_threshold: float = msgspec.field(default=_LLM_DEFAULTS.threshold)
     extend_xlsx: str = ""
+    snowball_enabled: bool = msgspec.field(default=_SNOWBALL_DEFAULTS.enabled)
+    snowball_direction: str = msgspec.field(default=_SNOWBALL_DEFAULTS.direction)
+    snowball_max_results_per_seed: int = msgspec.field(
+        default=_SNOWBALL_DEFAULTS.max_results_per_seed
+    )
     search_concepts: list[ConceptItem] = []
     filter_concepts: list[ConceptItem] = []
 
@@ -153,6 +160,9 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         extend = doc.get("extend", {})
         if extend:
             _expect_table(extend, "extend")
+        snowball = doc.get("snowball", {})
+        if snowball:
+            _expect_table(snowball, "snowball")
     except (AttributeError, TypeError) as exc:
         raise ValueError(f"Invalid config shape: {exc}") from exc
 
@@ -175,6 +185,13 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         llm_host=str(llm.get("host", _LLM_DEFAULTS.host)),
         llm_threshold=float(llm.get("threshold", _LLM_DEFAULTS.threshold)),
         extend_xlsx=str(extend.get("xlsx", "")) if extend else "",
+        snowball_enabled=bool(snowball.get("enabled", _SNOWBALL_DEFAULTS.enabled)),
+        snowball_direction=str(snowball.get("direction", _SNOWBALL_DEFAULTS.direction)),
+        snowball_max_results_per_seed=int(
+            snowball.get(
+                "max_results_per_seed", _SNOWBALL_DEFAULTS.max_results_per_seed
+            )
+        ),
         search_concepts=_read_concepts(search.get("concepts")),
         filter_concepts=_read_concepts(flt.get("concepts")),
     )
@@ -217,6 +234,18 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
         _set(extend, "xlsx", values.extend_xlsx.strip())
     elif "extend" in doc:
         del doc["extend"]
+
+    if (
+        "snowball" in doc
+        or values.snowball_enabled
+        or values.snowball_direction != _SNOWBALL_DEFAULTS.direction
+        or values.snowball_max_results_per_seed
+        != _SNOWBALL_DEFAULTS.max_results_per_seed
+    ):
+        snowball = _table(doc, "snowball")
+        _set(snowball, "enabled", values.snowball_enabled)
+        _set(snowball, "direction", values.snowball_direction)
+        _set(snowball, "max_results_per_seed", values.snowball_max_results_per_seed)
 
 
 def validate_text(text: str) -> str | None:

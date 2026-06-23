@@ -51,6 +51,22 @@ class SourceCount(msgspec.Struct, kw_only=True):
     count: int
 
 
+class SnowballLedger(msgspec.Struct, kw_only=True):
+    """Per-stage counts for the citation-searching (snowball) arm."""
+
+    seeds: int = 0  # included papers we tried to chase
+    seeds_resolved: int = 0  # seeds found in OpenAlex (had a usable DOI)
+    identified: int = 0  # raw candidates fetched (backward + forward)
+    backward: int = 0  # references found
+    forward: int = 0  # citing works found
+    duplicates_removed: int = 0  # internal dupes + dupes vs the main arm
+    excluded_keyword: int = 0
+    excluded_keyword_reasons: dict[str, int] = {}
+    excluded_llm: int = 0
+    included: int = 0
+    retrieval: list[QueryRetrieval] = []
+
+
 class Ledger(msgspec.Struct, kw_only=True):
     """Provenance counts at each pipeline stage."""
 
@@ -64,6 +80,7 @@ class Ledger(msgspec.Struct, kw_only=True):
     previously_included: int = 0
     already_screened: int = 0
     retrieval: list[QueryRetrieval] = []
+    snowball: SnowballLedger | None = None
 
     def total_identified(self) -> int:
         """Records identified across all sources before deduplication."""
@@ -74,8 +91,9 @@ class Ledger(msgspec.Struct, kw_only=True):
         return self.total_identified() - self.duplicates_removed
 
     def total_included(self) -> int:
-        """Studies in the final review: carried over plus newly included."""
-        return self.previously_included + self.included
+        """Studies in the final review: carried over + main arm + snowball section."""
+        snow = self.snowball.included if self.snowball is not None else 0
+        return self.previously_included + self.included + snow
 
     def truncated_sources(self) -> list[str]:
         """Sources with any query capped below the API's reported total."""
