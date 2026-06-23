@@ -26,6 +26,8 @@ VALID_LLM_PROVIDERS = {"openai", "ollama"}
 
 VALID_EXPORT_FORMATS = {"xlsx", "csv"}
 
+VALID_SNOWBALL_DIRECTIONS = {"backward", "forward", "both"}
+
 
 class ProjectConfig(msgspec.Struct, kw_only=True):
     """Project configuration."""
@@ -120,6 +122,14 @@ class DedupConfig(msgspec.Struct, kw_only=True):
     title_threshold: int = 90
 
 
+class SnowballConfig(msgspec.Struct, kw_only=True):
+    """Citation-chasing configuration: fetch refs/citations of included papers."""
+
+    enabled: bool = False
+    direction: str = "both"  # "backward" | "forward" | "both"
+    max_results_per_seed: int = 200  # cap per seed per direction
+
+
 class ExtendConfig(msgspec.Struct, kw_only=True):
     """Extend-mode configuration: build on a manually screened workbook."""
 
@@ -134,6 +144,7 @@ class SurveyConfig(msgspec.Struct, kw_only=True):
     dedup: DedupConfig = msgspec.field(default_factory=DedupConfig)
     filter: FilterConfig = msgspec.field(default_factory=FilterConfig)
     extend: ExtendConfig | None = None
+    snowball: SnowballConfig | None = None
 
 
 def disable_filters(cfg: SurveyConfig) -> None:
@@ -197,6 +208,18 @@ def load_config(path: str | Path) -> SurveyConfig:
             raise ValueError(
                 "extend.xlsx is the file this run would write; "
                 "use a different project.output_dir"
+            )
+    if cfg.snowball is not None:
+        if cfg.snowball.direction not in VALID_SNOWBALL_DIRECTIONS:
+            raise ValueError(
+                f"snowball.direction must be one of "
+                f"{', '.join(sorted(VALID_SNOWBALL_DIRECTIONS))}, "
+                f"got {cfg.snowball.direction!r}"
+            )
+        if cfg.snowball.max_results_per_seed <= 0:
+            raise ValueError(
+                "snowball.max_results_per_seed must be a positive integer, "
+                f"got {cfg.snowball.max_results_per_seed}"
             )
     if cfg.filter.llm.provider not in VALID_LLM_PROVIDERS:
         raise ValueError(

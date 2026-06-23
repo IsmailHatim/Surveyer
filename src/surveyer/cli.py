@@ -148,5 +148,37 @@ def extend(
         )
 
 
+@app.command()
+def snowball(
+    config: str = typer.Option(..., "--config", "-c", help="Path to survey.toml"),
+    papers: str = typer.Option(
+        ..., "--papers", "-p", help="Screened survey.xlsx to snowball from."
+    ),
+    refresh: bool = typer.Option(
+        False, "--refresh", help="Bypass the HTTP cache and refetch from OpenAlex."
+    ),
+) -> None:
+    """Chase references and citations of a screened workbook's included papers."""
+    from surveyer.snowball import run_snowball
+
+    cfg = load_config(config)
+    if cfg.snowball is None or not cfg.snowball.enabled:
+        typer.echo(
+            "Error: config has no enabled [snowball] section. "
+            "Add [snowball]\nenabled = true to chase citations.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    result = run_snowball(cfg, papers, refresh=refresh)
+    snow = result.ledger.snowball
+    typer.echo(
+        f"Done. Seeded from {result.ledger.previously_included} papers, "
+        f"identified {snow.identified} via citation searching, "
+        f"newly included {snow.included} "
+        f"(total {result.ledger.total_included()}). "
+        f"Outputs in {cfg.project.output_dir}/"
+    )
+
+
 if __name__ == "__main__":
     app()

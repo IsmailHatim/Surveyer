@@ -151,6 +151,7 @@ def _retrieval_frame(ledger: Ledger) -> pl.DataFrame:
             "truncated": qr.api_total is not None and qr.retrieved < qr.api_total,
         }
         for qr in ledger.retrieval
+        + (ledger.snowball.retrieval if ledger.snowball is not None else [])
     ]
     return pl.DataFrame(rows, schema=schema)
 
@@ -164,7 +165,20 @@ def _summary_frame(ledger: Ledger) -> pl.DataFrame:
         ("excluded_llm", ledger.excluded_llm),
         ("included", ledger.included),
     ]
-    if ledger.previously_included or ledger.already_screened:
+    if ledger.snowball is not None:
+        sb = ledger.snowball
+        stages += [
+            ("snowball_identified", sb.identified),
+            ("snowball_duplicates_removed", sb.duplicates_removed),
+            ("snowball_excluded_keyword", sb.excluded_keyword),
+            ("snowball_excluded_llm", sb.excluded_llm),
+            ("snowball_included", sb.included),
+        ]
+    if (
+        ledger.previously_included
+        or ledger.already_screened
+        or ledger.snowball is not None
+    ):
         stages += [
             ("already_screened", ledger.already_screened),
             ("previously_included", ledger.previously_included),

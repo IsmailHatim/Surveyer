@@ -19,6 +19,7 @@ from surveyer.filtering.llm import Scorer, apply_llm_filter, build_scorer
 from surveyer.ledger import save_ledger
 from surveyer.models import Ledger, Record, SourceCount
 from surveyer.prisma import render_prisma
+from surveyer.snowball import OpenAlexSnowball, build_openalex_client, snowball_stage
 from surveyer.sources import build_registry, fetch_all
 
 if TYPE_CHECKING:
@@ -44,6 +45,7 @@ def run_pipeline(
     resolve_bibtex: bool = True,
     refresh: bool = False,
     cancel: threading.Event | None = None,
+    snowball: OpenAlexSnowball | None = None,
 ) -> PipelineResult:
     """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma."""
     out_dir = Path(cfg.project.output_dir)
@@ -118,9 +120,28 @@ def run_pipeline(
     kept_llm_ids = {id(r) for r in after_llm}
     dropped.extend(r for r in after_kw if id(r) not in kept_llm_ids)
 
-    ledger.included = len(after_llm)
+    ledger.included = len(after_llm)  # main arm A (snowball counted separately)
 
     check_cancelled(cancel)
+
+    # 4ter. Snowball: chase refs/citations of the included set, screen the hits.
+    new_includes = after_llm
+    if cfg.snowball is not None and cfg.snowball.enabled:
+        seeds = (baseline.included if baseline is not None else []) + after_llm
+        already_seen = list(deduped)
+        if baseline is not None:
+            already_seen += baseline.included + baseline.excluded
+        if snowball is None:
+            snowball = OpenAlexSnowball(
+                build_openalex_client(cache_root, refresh=refresh)
+            )
+        snow_kept, snow_excluded, snow_ledger = snowball_stage(
+            seeds, already_seen, cfg, scorer, snowball, cancel=cancel
+        )
+        ledger.snowball = snow_ledger
+        dropped.extend(snow_excluded)
+        new_includes = after_llm + snow_kept
+        log.info("snowball.done", included=snow_ledger.included)
 
     # 4bis Resolve BibTeX for kept records (DBLP key -> DOI -> local fallback).
     if resolve_bibtex:
@@ -129,26 +150,28 @@ def run_pipeline(
 
             resolver = build_resolver(cache_root, refresh=refresh)
         if baseline is None:
-            resolver.resolve_all(after_llm)
+            resolver.resolve_all(new_includes)
         else:
             # Baseline rows keep their bibtex.
             resolver.resolve_all(
-                after_llm + [r for r in baseline.included if not r.bibtex]
+                new_includes + [r for r in baseline.included if not r.bibtex]
             )
 
     if baseline is not None:
-        kept_all = baseline.included + after_llm
+        kept_all = baseline.included + new_includes
         excluded_all = baseline.excluded + dropped
     else:
-        kept_all, excluded_all = after_llm, dropped
+        kept_all, excluded_all = new_includes, dropped
 
     # 5. Persist outputs
     save_ledger(ledger, out_dir / "ledger.json")
     if baseline is not None and cfg.extend is not None:
-        export_extended(cfg.extend.xlsx, kept_all, after_llm, dropped, ledger, out_dir)
+        export_extended(
+            cfg.extend.xlsx, kept_all, new_includes, dropped, ledger, out_dir
+        )
     else:
         export_results(
-            after_llm, dropped, ledger, out_dir, fmt=cfg.project.export_format
+            new_includes, dropped, ledger, out_dir, fmt=cfg.project.export_format
         )
     log.info("export.done", out_dir=str(out_dir), fmt=cfg.project.export_format)
     render_prisma(
