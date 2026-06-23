@@ -26,7 +26,7 @@ from textual.widgets import (
     Static,
 )
 
-from surveyer.config import VALID_LLM_PROVIDERS
+from surveyer.config import VALID_LLM_PROVIDERS, VALID_SNOWBALL_DIRECTIONS
 from surveyer.models import Ledger
 from surveyer.tui.concepts import ConceptsEditor
 from surveyer.tui.config_io import (
@@ -147,6 +147,29 @@ class DashboardScreen(Screen):
                     yield Static("extend", classes="section-title")
                     yield Label("Screened xlsx (blank = off; needs xlsx export)")
                     yield Input(value=v.extend_xlsx, id="extend_xlsx")
+                    yield Static("snowball", classes="section-title")
+                    yield Checkbox(
+                        "Citation chasing - snowball included papers via OpenAlex",
+                        value=v.snowball_enabled,
+                        id="snowball_enabled",
+                    )
+                    with Horizontal(classes="row"):
+                        with Vertical(classes="cell"):
+                            yield Label("Direction")
+                            yield Select(
+                                [(d, d) for d in ("backward", "forward", "both")],
+                                value=v.snowball_direction
+                                if v.snowball_direction in VALID_SNOWBALL_DIRECTIONS
+                                else Select.NULL,
+                                allow_blank=True,
+                                id="snowball_direction",
+                            )
+                        with Vertical(classes="cell"):
+                            yield Label("Max per seed")
+                            yield Input(
+                                value=str(v.snowball_max_results_per_seed),
+                                id="snowball_max_results_per_seed",
+                            )
                     yield Static(
                         self._concepts_summary_text(
                             v.search_concepts, v.filter_concepts
@@ -241,6 +264,16 @@ class DashboardScreen(Screen):
                 llm_host=self.query_one("#llm_host", Input).value,
                 llm_threshold=float(self.query_one("#llm_threshold", Input).value),
                 extend_xlsx=self.query_one("#extend_xlsx", Input).value,
+                snowball_enabled=self.query_one("#snowball_enabled", Checkbox).value,
+                snowball_direction=(
+                    self._values.snowball_direction
+                    if (raw_dir := self.query_one("#snowball_direction", Select).value)
+                    is Select.NULL
+                    else str(raw_dir)
+                ),
+                snowball_max_results_per_seed=int(
+                    self.query_one("#snowball_max_results_per_seed", Input).value
+                ),
                 search_concepts=search_concepts,
                 filter_concepts=filter_concepts,
             )
@@ -468,9 +501,13 @@ class DashboardScreen(Screen):
             if led.previously_included:
                 rows.append(("carried over", led.previously_included))
                 rows.append(("included (new)", led.included))
-                rows.append(("included (total)", led.total_included()))
             else:
                 rows.append(("included", led.included))
+            if led.snowball is not None:
+                rows.append(("citation-search identified", led.snowball.identified))
+                rows.append(("citation-search included", led.snowball.included))
+            if led.previously_included or led.snowball is not None:
+                rows.append(("included (total)", led.total_included()))
         lines = ["", "========== PRISMA flow =========="]
         lines += [f" {label:<20}{value:>7}" for label, value in rows]
         lines.append(f" diagram  {output_dir}/prisma.svg (.pdf/.png/.mmd)")
