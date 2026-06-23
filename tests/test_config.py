@@ -479,3 +479,62 @@ def test_disable_filters_clears_all_screening():
     assert cfg.filter.keyword.include == []
     assert cfg.filter.keyword.exclude == []
     assert cfg.filter.llm.enabled is False
+
+
+def test_snowball_config_defaults_absent(tmp_path):
+    from surveyer.config import load_config
+
+    p = tmp_path / "s.toml"
+    p.write_text(
+        '[project]\nname = "t"\n'
+        '[search]\nsources = ["openalex"]\nqueries = []\n'
+    )
+    cfg = load_config(p)
+    assert cfg.snowball is None
+
+
+def test_snowball_config_parsed(tmp_path):
+    from surveyer.config import load_config
+
+    p = tmp_path / "s.toml"
+    p.write_text(
+        '[project]\nname = "t"\n'
+        '[search]\nsources = ["openalex"]\nqueries = []\n'
+        '[snowball]\nenabled = true\ndirection = "backward"\n'
+        "max_results_per_seed = 25\n"
+    )
+    cfg = load_config(p)
+    assert cfg.snowball is not None
+    assert cfg.snowball.enabled is True
+    assert cfg.snowball.direction == "backward"
+    assert cfg.snowball.max_results_per_seed == 25
+
+
+def test_snowball_rejects_bad_direction(tmp_path):
+    import pytest
+
+    from surveyer.config import load_config
+
+    p = tmp_path / "s.toml"
+    p.write_text(
+        '[project]\nname = "t"\n'
+        '[search]\nsources = ["openalex"]\nqueries = []\n'
+        '[snowball]\nenabled = true\ndirection = "sideways"\n'
+    )
+    with pytest.raises(ValueError, match="snowball.direction"):
+        load_config(p)
+
+
+def test_snowball_rejects_nonpositive_cap(tmp_path):
+    import pytest
+
+    from surveyer.config import load_config
+
+    p = tmp_path / "s.toml"
+    p.write_text(
+        '[project]\nname = "t"\n'
+        '[search]\nsources = ["openalex"]\nqueries = []\n'
+        "[snowball]\nenabled = true\nmax_results_per_seed = 0\n"
+    )
+    with pytest.raises(ValueError, match="max_results_per_seed"):
+        load_config(p)

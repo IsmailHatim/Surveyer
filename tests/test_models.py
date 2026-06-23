@@ -73,3 +73,22 @@ def test_ledger_roundtrip_fields():
     )
     assert led.total_identified() == 10
     assert led.included == 4
+
+
+def test_snowball_ledger_defaults():
+    from surveyer.models import SnowballLedger
+
+    sl = SnowballLedger()
+    assert sl.seeds == 0
+    assert sl.included == 0
+    assert sl.excluded_keyword_reasons == {}
+    assert sl.retrieval == []
+
+
+def test_total_included_adds_snowball():
+    from surveyer.models import Ledger, SnowballLedger
+
+    led = Ledger(included=3, previously_included=2)
+    assert led.total_included() == 5
+    led.snowball = SnowballLedger(included=4)
+    assert led.total_included() == 9

@@ -321,3 +321,52 @@ def test_run_pipeline_records_retrieval(tmp_path):
     assert result.ledger.retrieval[0].retrieved == 3
     led = load_ledger(tmp_path / "ledger.json")
     assert led.retrieval[0].source == "fake"
+
+
+def test_run_pipeline_snowball_inline(tmp_path):
+    from surveyer.config import SnowballConfig
+    from surveyer.models import Record
+    from surveyer.snowball import SnowballFetch
+
+    cfg = _cfg(tmp_path)
+    cfg.snowball = SnowballConfig(enabled=True, direction="both")
+
+    class FakeSnowball:
+        def fetch(self, seeds, sb_cfg, *, cancel=None):
+            # one fresh, keyword+llm-passing candidate
+            return SnowballFetch(
+                candidates=[
+                    Record(title="Relevant security via citation", abstract="relevant")
+                ],
+                seeds_total=len(seeds),
+                seeds_resolved=len(seeds),
+                backward=1,
+                forward=0,
+                retrieval=[],
+            )
+
+    result = run_pipeline(
+        cfg,
+        registry={"fake": FakeSource()},
+        scorer=FakeScorer(),
+        resolve_bibtex=False,
+        snowball=FakeSnowball(),
+    )
+    assert result.ledger.included == 1  # main arm A unchanged
+    assert result.ledger.snowball is not None
+    assert result.ledger.snowball.included == 1  # set B
+    assert result.ledger.total_included() == 2
+    # the snowball include is in the exported kept set
+    assert any("via citation" in r.title for r in result.kept)
+    led = load_ledger(tmp_path / "ledger.json")
+    assert led.snowball is not None and led.snowball.included == 1
+
+
+def test_run_pipeline_snowball_disabled_by_default(tmp_path):
+    result = run_pipeline(
+        _cfg(tmp_path),
+        registry={"fake": FakeSource()},
+        scorer=FakeScorer(),
+        resolve_bibtex=False,
+    )
+    assert result.ledger.snowball is None

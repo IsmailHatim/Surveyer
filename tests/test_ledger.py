@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from surveyer.ledger import load_ledger, save_ledger
-from surveyer.models import Ledger, SourceCount
+from surveyer.models import Ledger, QueryRetrieval, SnowballLedger, SourceCount
 
 
 def test_ledger_save_load_roundtrip(tmp_path):
@@ -48,3 +48,35 @@ def test_old_ledger_json_still_loads(tmp_path):
     assert led.included == 2
     assert led.previously_included == 0
     assert led.already_screened == 0
+
+
+def test_ledger_roundtrips_snowball(tmp_path):
+    led = Ledger(
+        included=2,
+        snowball=SnowballLedger(
+            seeds=2,
+            seeds_resolved=2,
+            identified=10,
+            backward=7,
+            forward=3,
+            duplicates_removed=1,
+            excluded_keyword=2,
+            excluded_keyword_reasons={"no graph": 2},
+            excluded_llm=1,
+            included=4,
+            retrieval=[
+                QueryRetrieval(
+                    source="openalex",
+                    query_label="snowball:backward",
+                    requested=200,
+                    retrieved=7,
+                )
+            ],
+        ),
+    )
+    save_ledger(led, tmp_path / "l.json")
+    back = load_ledger(tmp_path / "l.json")
+    assert back.snowball is not None
+    assert back.snowball.included == 4
+    assert back.snowball.excluded_keyword_reasons == {"no graph": 2}
+    assert back.snowball.retrieval[0].query_label == "snowball:backward"
