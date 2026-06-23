@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from surveyer.models import Record
+from surveyer.models import SearchResult
 
 
 class AgentSource:
@@ -10,7 +10,7 @@ class AgentSource:
 
     name = "agent"
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
         """Raise NotImplementedError - agent search is not yet implemented."""
         raise NotImplementedError(
             "Agent-based search is alpha and not implemented in v1. "

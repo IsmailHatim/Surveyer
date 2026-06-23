@@ -8,8 +8,8 @@ import xml.etree.ElementTree as ET
 
 import structlog
 
-from surveyer.models import Record
-from surveyer.sources.base import HttpClient
+from surveyer.models import Record, SearchResult
+from surveyer.sources.base import HttpClient, coerce_int
 
 log = structlog.get_logger()
 
@@ -120,9 +120,10 @@ class PubMedSource:
         self.year_min = year_min
         self.year_max = year_max
 
-    def _esearch(self, terms: str, max_results: int) -> list[str]:
-        """Collect PMIDs from esearch, paginating via retstart."""
+    def _esearch(self, terms: str, max_results: int) -> tuple[list[str], int | None]:
+        """Collect PMIDs from esearch (paginating via retstart) and the match total."""
         ids: list[str] = []
+        api_total: int | None = None
         retstart = 0
         while len(ids) < max_results:
             retmax = min(max_results - len(ids), PAGE_SIZE)
@@ -141,16 +142,19 @@ class PubMedSource:
                 if self.year_max:
                     params["maxdate"] = self.year_max
             raw = self.client.get_json(ESEARCH, params=params)
-            batch = raw.get("esearchresult", {}).get("idlist", [])
+            result = raw.get("esearchresult", {})
+            if api_total is None:
+                api_total = coerce_int(result.get("count"))
+            batch = result.get("idlist", [])
             ids.extend(batch)
             if len(batch) < retmax:
                 break
             retstart += retmax
-        return ids[:max_results]
+        return ids[:max_results], api_total
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search PubMed via esearch then efetch, returning parsed records."""
-        ids = self._esearch(terms, max_results)
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
+        """Search PubMed via esearch then efetch, returning records and API total."""
+        ids, api_total = self._esearch(terms, max_results)
         out: list[Record] = []
         for start in range(0, len(ids), BATCH_SIZE):
             chunk = ids[start : start + BATCH_SIZE]
@@ -164,4 +168,4 @@ class PubMedSource:
             xml_text = self.client.get_text(EFETCH, params=params)
             if xml_text:
                 out.extend(parse_pubmed(xml_text))
-        return out[:max_results]
+        return SearchResult(records=out[:max_results], api_total=api_total)

@@ -8,12 +8,12 @@ import time
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 import structlog
 
-from surveyer.models import Record
+from surveyer.models import SearchResult
 
 log = structlog.get_logger()
 
@@ -39,13 +39,24 @@ def dequote_terms(terms: str) -> str:
     return " ".join(terms.replace('"', " ").split())
 
 
+def coerce_int(value: object) -> int | None:
+    """Best-effort int from an API total field that may be a string or missing."""
+    if value is None:
+        return None
+    v: Any = value
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 class Source(Protocol):
     """A bibliographic source adapter."""
 
     name: str
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Return raw records (provenance fields filled by the caller)."""
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
+        """Return records plus the API's reported total (provenance set by caller)."""
         ...
 
 

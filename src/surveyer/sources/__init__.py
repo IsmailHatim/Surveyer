@@ -7,11 +7,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import msgspec
 import structlog
 
 from surveyer.cancel import check_cancelled
 from surveyer.config import Query, SearchConfig
-from surveyer.models import Record
+from surveyer.models import QueryRetrieval, Record, SearchResult
 from surveyer.sources.agent import AgentSource
 from surveyer.sources.base import HttpClient, Source
 from surveyer.sources.dblp import DblpSource
@@ -21,6 +22,15 @@ from surveyer.sources.pubmed import PubMedSource
 from surveyer.sources.semantic_scholar import SemanticScholarSource, make_headers
 
 log = structlog.get_logger()
+
+
+class FetchResult(msgspec.Struct):
+    """Aggregated output of a multi-source fetch."""
+
+    records: list[Record]
+    counts: dict[str, int]
+    retrieval: list[QueryRetrieval]
+    failed: list[str]
 
 
 def build_registry(
@@ -92,25 +102,42 @@ def _fetch_one_source(
     queries: list[Query],
     max_results: int,
     cancel: threading.Event | None,
-) -> tuple[list[Record], int, bool]:
-    """Run all queries for a single source. Returns (records, count, had_error)."""
+) -> tuple[list[Record], list[QueryRetrieval], bool]:
+    """Run all queries for a single source. Returns (records, retrieval, had_error)."""
     out: list[Record] = []
+    retrieval: list[QueryRetrieval] = []
     had_error = False
     for query in queries:
         check_cancelled(cancel)
         try:
-            hits = source.search(query.terms, max_results=max_results)
+            result: SearchResult = source.search(query.terms, max_results=max_results)
         except Exception as exc:
             log.warning("source.failed", source=name, query=query.label, error=str(exc))
             had_error = True
             continue
+        hits = result.records
         for r in hits:
             r.sources = [name]
             r.query_labels = [query.label]
         out.extend(hits)
-        log.info("fetch.query_done", source=name, query=query.label, hits=len(hits))
+        retrieval.append(
+            QueryRetrieval(
+                source=name,
+                query_label=query.label,
+                requested=max_results,
+                retrieved=len(hits),
+                api_total=result.api_total,
+            )
+        )
+        log.info(
+            "fetch.query_done",
+            source=name,
+            query=query.label,
+            hits=len(hits),
+            api_total=result.api_total,
+        )
     log.info("fetch.source_done", source=name, count=len(out))
-    return out, len(out), had_error
+    return out, retrieval, had_error
 
 
 def fetch_all(
@@ -118,13 +145,14 @@ def fetch_all(
     registry: dict[str, Source],
     *,
     cancel: threading.Event | None = None,
-) -> tuple[list[Record], dict[str, int], list[str]]:
+) -> FetchResult:
     """Run every (source, query) pair concurrently across sources."""
     records: list[Record] = []
     counts: dict[str, int] = {}
+    retrieval: list[QueryRetrieval] = []
     failed: list[str] = []
     if not registry:
-        return records, counts, failed
+        return FetchResult(records, counts, retrieval, failed)
     queries = search.resolved_queries()
 
     with ThreadPoolExecutor(max_workers=len(registry)) as pool:
@@ -139,11 +167,12 @@ def fetch_all(
             )
             for name, source in registry.items()
         }
-        # Resolve in registry order so records, counts and failed are deterministic.
+        # Resolve in registry order so records, counts and retrieval are deterministic.
         for name in registry:
-            recs, count, had_error = futures[name].result()
+            recs, rows, had_error = futures[name].result()
             records.extend(recs)
-            counts[name] = count
+            counts[name] = len(recs)
+            retrieval.extend(rows)
             if had_error:
                 failed.append(name)
-    return records, counts, failed
+    return FetchResult(records, counts, retrieval, failed)
