@@ -14,7 +14,7 @@ from surveyer.export import (
     export_results,
     export_xlsx,
 )
-from surveyer.models import Ledger, Record, SourceCount
+from surveyer.models import Ledger, QueryRetrieval, Record, SourceCount
 
 
 def test_export_creates_sheets(tmp_path):
@@ -25,7 +25,7 @@ def test_export_creates_sheets(tmp_path):
     export_xlsx(kept, excluded, ledger, out)
 
     wb = load_workbook(out)
-    assert set(wb.sheetnames) == {"papers", "excluded", "summary"}
+    assert set(wb.sheetnames) == {"papers", "excluded", "summary", "retrieval"}
     assert wb["papers"]["A1"].value == "title"
     assert wb["papers"]["A2"].value == "Kept paper"
     assert wb["excluded"]["A1"].value == "title"
@@ -51,7 +51,7 @@ def test_export_handles_empty_inputs(tmp_path):
     out = tmp_path / "empty.xlsx"
     export_xlsx([], [], Ledger(), out)
     wb = load_workbook(out)
-    assert set(wb.sheetnames) == {"papers", "excluded", "summary"}
+    assert set(wb.sheetnames) == {"papers", "excluded", "summary", "retrieval"}
     assert wb["papers"]["A1"].value == "title"
 
 
@@ -85,7 +85,7 @@ def test_export_results_dispatches_xlsx(tmp_path):
 
     assert (tmp_path / "survey.xlsx").exists()
     wb = load_workbook(tmp_path / "survey.xlsx")
-    assert set(wb.sheetnames) == {"papers", "excluded", "summary"}
+    assert set(wb.sheetnames) == {"papers", "excluded", "summary", "retrieval"}
 
 
 def test_export_results_dispatches_csv(tmp_path):
@@ -97,6 +97,7 @@ def test_export_results_dispatches_csv(tmp_path):
         "papers.csv",
         "excluded.csv",
         "summary.csv",
+        "retrieval.csv",
     }
 
 
@@ -335,3 +336,38 @@ def test_export_extended_backfills_bibtex_by_doi_after_title_edit(tmp_path):
     src_col = header2.index("bibtex_source") + 1
     assert ws2.cell(row=2, column=bib_col).value == "@article{x}"
     assert ws2.cell(row=2, column=src_col).value == "dblp"
+
+
+def _retrieval_ledger():
+    return Ledger(
+        included=1,
+        retrieval=[
+            QueryRetrieval(source="openalex", query_label="q1", requested=100,
+                           retrieved=100, api_total=5000),
+            QueryRetrieval(source="dblp", query_label="q1", requested=100,
+                           retrieved=7, api_total=7),
+        ],
+    )
+
+
+def test_export_xlsx_has_retrieval_sheet(tmp_path):
+    from openpyxl import load_workbook
+
+    path = tmp_path / "survey.xlsx"
+    export_xlsx([], [], _retrieval_ledger(), path)
+    wb = load_workbook(path)
+    assert "retrieval" in wb.sheetnames
+    header = [c.value for c in wb["retrieval"][1]]
+    assert header == [
+        "source", "query_label", "requested", "retrieved", "api_total", "truncated"
+    ]
+    first = [c.value for c in wb["retrieval"][2]]
+    assert first[0] == "openalex"
+    assert first[5] is True  # truncated (100 < 5000)
+
+
+def test_export_csv_writes_retrieval(tmp_path):
+    export_csv([], [], _retrieval_ledger(), tmp_path)
+    text = (tmp_path / "retrieval.csv").read_text()
+    assert "source,query_label,requested,retrieved,api_total,truncated" in text
+    assert "openalex" in text

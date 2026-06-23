@@ -21,12 +21,12 @@ def test_config_restored_after_context():
 
 def test_fetch_all_emits_source_done_event():
     from surveyer.config import Query, SearchConfig
-    from surveyer.models import Record
+    from surveyer.models import Record, SearchResult
     from surveyer.sources import fetch_all
 
     class FakeSource:
         def search(self, terms, max_results):
-            return [Record(title="t", year=2020)]
+            return SearchResult(records=[Record(title="t", year=2020)])
 
     search = SearchConfig(sources=["dblp"], queries=[Query(label="q", terms="x")])
     lines: list[str] = []

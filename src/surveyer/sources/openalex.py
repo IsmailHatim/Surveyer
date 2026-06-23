@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from surveyer.models import Record
-from surveyer.sources.base import HttpClient
+from surveyer.models import Record, SearchResult
+from surveyer.sources.base import HttpClient, coerce_int
 
 API = "https://api.openalex.org/works"
 
@@ -68,8 +68,8 @@ class OpenAlexSource:
         self.year_min = year_min
         self.year_max = year_max
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search OpenAlex, paginating until max_results is reached."""
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
+        """Search OpenAlex, paginating until max_results, with the API total."""
         per_page = min(max_results, PAGE_SIZE)
         filters = []
         if self.year_min:
@@ -78,6 +78,7 @@ class OpenAlexSource:
             filters.append(f"to_publication_date:{self.year_max}-12-31")
 
         out: list[Record] = []
+        api_total: int | None = None
         page = 1
         while len(out) < max_results:
             # Quotes are intentionally preserved for OpenAlex
@@ -85,9 +86,11 @@ class OpenAlexSource:
             if filters:
                 params["filter"] = ",".join(filters)
             raw = self.client.get_json(API, params=params)
+            if api_total is None:
+                api_total = coerce_int((raw.get("meta") or {}).get("count"))
             batch = parse_openalex(raw)
             out.extend(batch)
             if len(batch) < per_page:
                 break
             page += 1
-        return out[:max_results]
+        return SearchResult(records=out[:max_results], api_total=api_total)

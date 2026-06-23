@@ -5,8 +5,8 @@ from __future__ import annotations
 import httpx
 import structlog
 
-from surveyer.models import Record
-from surveyer.sources.base import HttpClient, dequote_terms
+from surveyer.models import Record, SearchResult
+from surveyer.sources.base import HttpClient, coerce_int, dequote_terms
 
 log = structlog.get_logger()
 
@@ -54,8 +54,8 @@ class DblpSource:
         self.client = client
         self.api = API
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search DBLP and return records, falling back to the Trier mirror."""
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
+        """Search DBLP and return records + API total, falling back to the mirror."""
         # DBLP has no phrase operator; drop phrase quotes to prefix-AND matching.
         params = {"q": dequote_terms(terms), "format": "json", "h": max_results}
         try:
@@ -67,4 +67,7 @@ class DblpSource:
             # Sticky: dblp.org is rate-limiting us
             self.api = MIRROR_API
             raw = self.client.get_json(self.api, params=params)
-        return parse_dblp(raw)
+        api_total = coerce_int(
+            ((raw.get("result") or {}).get("hits") or {}).get("@total")
+        )
+        return SearchResult(records=parse_dblp(raw), api_total=api_total)

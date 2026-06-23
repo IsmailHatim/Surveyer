@@ -128,6 +128,33 @@ def _to_frame(records: list[Record]) -> pl.DataFrame:
     return pl.DataFrame(rows, schema=_SCHEMA).select(_COLUMNS)
 
 
+def _retrieval_frame(ledger: Ledger) -> pl.DataFrame:
+    """Per-(source, query) retrieval detail: requested/retrieved/api_total/truncated.
+
+    `truncated` is computed per query here; PRISMA aggregates it per source.
+    """
+    schema = {
+        "source": pl.Utf8,
+        "query_label": pl.Utf8,
+        "requested": pl.Int64,
+        "retrieved": pl.Int64,
+        "api_total": pl.Int64,
+        "truncated": pl.Boolean,
+    }
+    rows = [
+        {
+            "source": qr.source,
+            "query_label": qr.query_label,
+            "requested": qr.requested,
+            "retrieved": qr.retrieved,
+            "api_total": qr.api_total,
+            "truncated": qr.api_total is not None and qr.retrieved < qr.api_total,
+        }
+        for qr in ledger.retrieval
+    ]
+    return pl.DataFrame(rows, schema=schema)
+
+
 def _summary_frame(ledger: Ledger) -> pl.DataFrame:
     stages: list[tuple[str, int]] = [
         ("total_identified", ledger.total_identified()),
@@ -194,6 +221,13 @@ def export_xlsx(
             autofit=True,
             freeze_panes=(1, 0),
         )
+        _retrieval_frame(ledger).write_excel(
+            workbook=wb,
+            worksheet="retrieval",
+            header_format=_HEADER_FORMAT,
+            autofit=True,
+            freeze_panes=(1, 0),
+        )
     finally:
         wb.close()
 
@@ -210,6 +244,7 @@ def export_csv(
     _to_frame(kept).write_csv(out_dir / "papers.csv")
     _to_frame(excluded).write_csv(out_dir / "excluded.csv")
     _summary_frame(ledger).write_csv(out_dir / "summary.csv")
+    _retrieval_frame(ledger).write_csv(out_dir / "retrieval.csv")
 
 
 def export_results(
@@ -247,6 +282,17 @@ def _rewrite_summary(wb, ledger: Ledger) -> None:
     ws.append(frame.columns)
     for stage, count in frame.iter_rows():
         ws.append([stage, count])
+
+
+def _rewrite_retrieval(wb, ledger: Ledger) -> None:
+    """Replace the retrieval sheet with the new run's per-query detail."""
+    if "retrieval" in wb.sheetnames:
+        del wb["retrieval"]
+    ws = wb.create_sheet("retrieval")
+    frame = _retrieval_frame(ledger)
+    ws.append(frame.columns)
+    for row in frame.iter_rows():
+        ws.append(list(row))
 
 
 def _patch_missing_bibtex(ws, records: list[Record]) -> None:
@@ -313,6 +359,7 @@ def export_extended_xlsx(
     _append_records(wb["excluded"], new_excluded)
     _patch_missing_bibtex(wb["papers"], all_kept)
     _rewrite_summary(wb, ledger)
+    _rewrite_retrieval(wb, ledger)
     wb.save(path)
 
 

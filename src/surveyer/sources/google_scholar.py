@@ -3,8 +3,18 @@
 from __future__ import annotations
 
 import itertools
+from typing import Any
 
-from surveyer.models import Record
+from surveyer.models import Record, SearchResult
+
+_scholarly_lib: Any = None
+try:  # pragma: no cover - optional dep
+    from scholarly import scholarly as _scholarly_lib
+except ImportError:  # pragma: no cover - optional dep
+    pass
+
+# Module-level alias so tests can monkeypatch ``gs.scholarly``.
+scholarly: Any = _scholarly_lib
 
 
 def parse_scholar_entry(entry: dict) -> Record:
@@ -24,18 +34,27 @@ def parse_scholar_entry(entry: dict) -> Record:
     )
 
 
+def _get_scholarly() -> Any:
+    """Return the scholarly singleton, raising if the optional dep is missing."""
+    import surveyer.sources.google_scholar as _mod
+
+    if _mod.scholarly is None:  # pragma: no cover - import guard
+        raise RuntimeError(
+            "Google Scholar needs the optional extra: pip install surveyer[scholar]"
+        )
+    return _mod.scholarly
+
+
 class GoogleScholarSource:
     """Google Scholar bibliographic source adapter."""
 
     name = "google_scholar"
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search Google Scholar and return records."""
-        try:
-            from scholarly import scholarly
-        except ImportError as exc:  # pragma: no cover - import guard
-            raise RuntimeError(
-                "Google Scholar needs the optional extra: pip install surveyer[scholar]"
-            ) from exc
-        results = scholarly.search_pubs(terms)
-        return [parse_scholar_entry(e) for e in itertools.islice(results, max_results)]
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
+        """Search Google Scholar; api_total is None (scraper exposes no total)."""
+        _scholarly = _get_scholarly()
+        results = _scholarly.search_pubs(terms)
+        records = [
+            parse_scholar_entry(e) for e in itertools.islice(results, max_results)
+        ]
+        return SearchResult(records=records, api_total=None)

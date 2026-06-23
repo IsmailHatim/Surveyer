@@ -175,7 +175,46 @@ def _build(model: PrismaModel, rail_width: float) -> graphviz.Digraph:
             s.node("query")
             s.edge(excl_anchor, "query", style="invis")
 
+    _add_completeness_table(dot, model)
     return dot
+
+
+def _add_completeness_table(dot: graphviz.Digraph, model: PrismaModel) -> None:
+    """Bottom HTML-table node listing per-source retrieval completeness."""
+    if not model.source_completeness:
+        return
+    rows = [
+        "<TR><TD><B>source</B></TD><TD><B>req/query</B></TD>"
+        "<TD><B>retrieved</B></TD><TD><B>API total</B></TD></TR>"
+    ]
+    truncated = False
+    for c in model.source_completeness:
+        total = "n/a" if c.api_total is None else str(c.api_total)
+        if c.partial_total:
+            total += "*"
+        flag = " &#9888;&#65039;" if c.truncated else ""  # ⚠️
+        truncated = truncated or c.truncated
+        rows.append(
+            f"<TR><TD>{c.source}</TD><TD>{c.requested}</TD>"
+            f"<TD>{c.retrieved}</TD><TD>{total}{flag}</TD></TR>"
+        )
+    caption = "<TR><TD COLSPAN='4'><B>Search completeness</B></TD></TR>"
+    foot = ""
+    if truncated:
+        foot = (
+            "<TR><TD COLSPAN='4'><FONT POINT-SIZE='8'>"
+            "&#9888;&#65039; retrieved fewer than the database reports — search capped"
+            "</FONT></TD></TR>"
+        )
+    table = (
+        "<<TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0' CELLPADDING='4'>"
+        + caption
+        + "".join(rows)
+        + foot
+        + "</TABLE>>"
+    )
+    dot.node("completeness", table, shape="plaintext", style="", group="spine")
+    dot.edge(model.rows[-1].id, "completeness", style="invis")
 
 
 def _add_swimlane_bands(dot: graphviz.Digraph, model: PrismaModel) -> None:

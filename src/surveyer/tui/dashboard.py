@@ -475,6 +475,9 @@ class DashboardScreen(Screen):
         lines += [f" {label:<20}{value:>7}" for label, value in rows]
         lines.append(f" diagram  {output_dir}/prisma.svg (.pdf/.png/.mmd)")
         lines.append(" press 'o' to open output directory.")
+        truncated = led.truncated_sources()
+        if truncated:
+            lines.append(f" ⚠️ capped below API total: {', '.join(truncated)}")
         return "\n".join(lines)
 
     def _finish_run(self) -> None:

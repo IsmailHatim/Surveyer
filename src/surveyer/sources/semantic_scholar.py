@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-from surveyer.models import Record
-from surveyer.sources.base import HttpClient
+from surveyer.models import Record, SearchResult
+from surveyer.sources.base import HttpClient, coerce_int
 
 API = "https://api.semanticscholar.org/graph/v1/paper/search"
 FIELDS = "title,abstract,year,citationCount,externalIds,venue,url,authors"
@@ -44,9 +44,10 @@ class SemanticScholarSource:
         """Initialise the Semantic Scholar source with the given HTTP client."""
         self.client = client
 
-    def search(self, terms: str, *, max_results: int) -> list[Record]:
-        """Search Semantic Scholar, paginating until max_results is reached."""
+    def search(self, terms: str, *, max_results: int) -> SearchResult:
+        """Search Semantic Scholar, paginating until max_results, with API total."""
         out: list[Record] = []
+        api_total: int | None = None
         offset = 0
         while len(out) < max_results:
             limit = min(max_results - len(out), PAGE_SIZE)
@@ -58,13 +59,15 @@ class SemanticScholarSource:
                 "fields": FIELDS,
             }
             raw = self.client.get_json(API, params=params)
+            if api_total is None:
+                api_total = coerce_int(raw.get("total"))
             batch = parse_s2(raw)
             out.extend(batch)
             nxt = raw.get("next")
             if not batch or nxt is None:
                 break
             offset = nxt
-        return out[:max_results]
+        return SearchResult(records=out[:max_results], api_total=api_total)
 
 
 def make_headers() -> dict[str, str]:

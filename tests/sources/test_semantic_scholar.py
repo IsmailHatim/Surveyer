@@ -37,8 +37,8 @@ def test_s2_search_paginates_past_the_100_cap(tmp_path):
         return httpx.Response(200, json=body)
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = SemanticScholarSource(client).search("x", max_results=150)
-    assert len(records) == 150
+    result = SemanticScholarSource(client).search("x", max_results=150)
+    assert len(result.records) == 150
 
 
 def test_s2_search_preserves_quoted_phrases(tmp_path):
@@ -71,5 +71,17 @@ def test_s2_search_stops_at_max_results(tmp_path):
         )
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = SemanticScholarSource(client).search("x", max_results=120)
-    assert len(records) == 120
+    result = SemanticScholarSource(client).search("x", max_results=120)
+    assert len(result.records) == 120
+
+
+def test_s2_search_returns_api_total(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"total": 312, "data": [{"title": "P"}], "next": None}
+        )
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    result = SemanticScholarSource(client).search("x", max_results=10)
+    assert result.api_total == 312
+    assert [r.title for r in result.records] == ["P"]

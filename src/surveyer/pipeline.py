@@ -73,11 +73,13 @@ def run_pipeline(
         registry = build_registry(cfg.search, cache_root, refresh=refresh)
 
     # 1. Fetch
-    records, counts, failed = fetch_all(cfg.search, registry, cancel=cancel)
+    fetch = fetch_all(cfg.search, registry, cancel=cancel)
     ledger = Ledger(
-        identified=[SourceCount(source=s, count=n) for s, n in counts.items()]
+        identified=[SourceCount(source=s, count=n) for s, n in fetch.counts.items()],
+        retrieval=fetch.retrieval,
     )
-    ledger.failed_sources = failed
+    ledger.failed_sources = fetch.failed
+    records = fetch.records
 
     # 2. Deduplicate
     deduped, removed = deduplicate(records, title_threshold=cfg.dedup.title_threshold)

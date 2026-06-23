@@ -44,8 +44,8 @@ def test_openalex_search_paginates_past_one_page(tmp_path):
         return httpx.Response(200, json={"meta": {"count": total}, "results": results})
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = OpenAlexSource(client).search("x", max_results=250)
-    assert len(records) == 250
+    result = OpenAlexSource(client).search("x", max_results=250)
+    assert len(result.records) == 250
 
 
 def test_openalex_search_preserves_quoted_phrases(tmp_path):
@@ -68,5 +68,17 @@ def test_openalex_search_stops_when_results_exhausted(tmp_path):
         return httpx.Response(200, json={"meta": {"count": 30}, "results": results})
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    records = OpenAlexSource(client).search("x", max_results=200)
-    assert len(records) == 30
+    result = OpenAlexSource(client).search("x", max_results=200)
+    assert len(result.records) == 30
+
+
+def test_openalex_search_returns_api_total(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"meta": {"count": 5231}, "results": [{"title": "W"}]}
+        )
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    result = OpenAlexSource(client).search("x", max_results=10)
+    assert result.api_total == 5231
+    assert [r.title for r in result.records] == ["W"]

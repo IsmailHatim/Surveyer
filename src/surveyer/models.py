@@ -27,6 +27,23 @@ class Record(msgspec.Struct, kw_only=True):
     bibtex_source: str | None = None
 
 
+class SearchResult(msgspec.Struct, kw_only=True):
+    """Records returned by one source query, plus the API's reported match total."""
+
+    records: list[Record]
+    api_total: int | None = None
+
+
+class QueryRetrieval(msgspec.Struct, kw_only=True):
+    """Retrieval accounting for one (source, query): requested/retrieved/API-total."""
+
+    source: str
+    query_label: str
+    requested: int
+    retrieved: int
+    api_total: int | None = None
+
+
 class SourceCount(msgspec.Struct, kw_only=True):
     """How many records a single source contributed."""
 
@@ -46,6 +63,7 @@ class Ledger(msgspec.Struct, kw_only=True):
     failed_sources: list[str] = []
     previously_included: int = 0
     already_screened: int = 0
+    retrieval: list[QueryRetrieval] = []
 
     def total_identified(self) -> int:
         """Records identified across all sources before deduplication."""
@@ -58,3 +76,15 @@ class Ledger(msgspec.Struct, kw_only=True):
     def total_included(self) -> int:
         """Studies in the final review: carried over plus newly included."""
         return self.previously_included + self.included
+
+    def truncated_sources(self) -> list[str]:
+        """Sources with any query capped below the API's reported total."""
+        out: list[str] = []
+        for qr in self.retrieval:
+            if (
+                qr.api_total is not None
+                and qr.retrieved < qr.api_total
+                and qr.source not in out
+            ):
+                out.append(qr.source)
+        return out
