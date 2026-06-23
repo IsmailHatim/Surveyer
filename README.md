@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11+-informational?logo=python&logoColor=white"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="managed with uv" src="https://img.shields.io/badge/uv-managed-blueviolet?logo=uv&logoColor=white"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-0.2.1-success">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0--alpha-orange">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey">
   <a href="https://github.com/IsmailHatim/Surveyer/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/IsmailHatim/Surveyer?logo=github&color=yellow"></a>
   <a href="https://github.com/IsmailHatim/Surveyer/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/IsmailHatim/Surveyer?color=teal"></a>
@@ -78,6 +78,9 @@ uv run surveyer prisma --config examples/survey.toml
 
 # Search new queries on top of a manually screened survey.xlsx
 uv run surveyer extend --config examples/survey_v2.toml
+
+# Chase citations (snowballing) from a screened survey.xlsx
+uv run surveyer snowball --config examples/survey.toml --papers runs/v1/survey.xlsx
 
 # Bypass the HTTP cache and refetch (works on run, fetch and extend)
 uv run surveyer run --config examples/survey.toml --refresh
@@ -156,6 +159,33 @@ The output `survey.xlsx` is a **copy** of your screened file with new rows appen
 BibTeX is backfilled, and the PRISMA diagram switches to the 2020 review-update layout
 (previous-version box and cumulative total). Requires `export_format = "xlsx"` (updates can be iterated)
 
+## Snowball (citation chasing)
+
+Beyond keyword search, you can find related work by following citations from the
+papers you already included. Enable the `[snowball]` block to chase, for each
+included paper, the works it **cites** (backward), the works that **cite it**
+(forward), or `both`:
+
+```toml
+[snowball]
+enabled = true
+direction = "both"            # backward | forward | both
+max_results_per_seed = 200    # cap per direction, per seed
+```
+
+Candidates are deduplicated (against each other and the main results) and screened
+through the same keyword and LLM filters, so only relevant citations survive. The
+PRISMA diagram gains a parallel *identification via citation searching* arm that
+joins the keyword arm at the shared total. Snowballing runs inline during
+`surveyer run` (seeds = the included set), or standalone from a screened workbook:
+
+```bash
+uv run surveyer snowball --config examples/survey.toml --papers runs/v1/survey.xlsx
+```
+
+Citation data comes from OpenAlex (depth 1: newly found papers are not themselves
+re-snowballed). The `[snowball]` knobs are also editable in the dashboard.
+
 ## Sources
 
 | Source            | API key | Notes                                   |
@@ -169,9 +199,18 @@ BibTeX is backfilled, and the PRISMA diagram switches to the 2020 review-update 
 
 ## Outputs
 
-- `survey.xlsx` - `papers`, `excluded`, and `summary` sheets.
+- `survey.xlsx` - `papers`, `excluded`, `summary`, and `retrieval` sheets.
 - `references.bib` - one BibTeX entry per included paper.
 - `ledger.json` - per-stage counts (the input to PRISMA).
+
+### Search completeness
+
+For every source and query, Surveyer records how many results it **requested**,
+how many it actually **retrieved**, and the database's own **reported total** when
+the API exposes one. This lands in the `retrieval` sheet (and `retrieval.csv`), so
+you can tell when a source was capped below its full match count and may have
+missed papers bump `max_results_per_query` for those sources. The dashboard also
+warns when a search looks truncated.
 
 ### BibTeX citations
 
