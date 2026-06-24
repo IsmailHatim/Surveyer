@@ -13,6 +13,7 @@ from tomlkit import TOMLDocument
 from surveyer.config import (
     VALID_SOURCES,
     DedupConfig,
+    FilterConfig,
     LLMConfig,
     ProjectConfig,
     SearchConfig,
@@ -37,6 +38,7 @@ assert set(TOGGLEABLE_SOURCES) <= VALID_SOURCES, (
 _PROJECT_DEFAULTS = ProjectConfig(name="")
 _SEARCH_DEFAULTS = SearchConfig(sources=[], queries=[])
 _DEDUP_DEFAULTS = DedupConfig()
+_FILTER_DEFAULTS = FilterConfig()
 _LLM_DEFAULTS = LLMConfig()
 _SNOWBALL_DEFAULTS = SnowballConfig()
 
@@ -66,6 +68,8 @@ class FormValues(msgspec.Struct, kw_only=True):
     llm_model: str = msgspec.field(default=_LLM_DEFAULTS.model)
     llm_host: str = msgspec.field(default=_LLM_DEFAULTS.host)
     llm_threshold: float = msgspec.field(default=_LLM_DEFAULTS.threshold)
+    concept_mode: str = msgspec.field(default=_FILTER_DEFAULTS.concept_mode)
+    review_margin: float = msgspec.field(default=_LLM_DEFAULTS.review_margin)
     extend_xlsx: str = ""
     snowball_enabled: bool = msgspec.field(default=_SNOWBALL_DEFAULTS.enabled)
     snowball_direction: str = msgspec.field(default=_SNOWBALL_DEFAULTS.direction)
@@ -184,6 +188,8 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         llm_model=str(llm.get("model", _LLM_DEFAULTS.model)),
         llm_host=str(llm.get("host", _LLM_DEFAULTS.host)),
         llm_threshold=float(llm.get("threshold", _LLM_DEFAULTS.threshold)),
+        concept_mode=str(flt.get("concept_mode", _FILTER_DEFAULTS.concept_mode)),
+        review_margin=float(llm.get("review_margin", _LLM_DEFAULTS.review_margin)),
         extend_xlsx=str(extend.get("xlsx", "")) if extend else "",
         snowball_enabled=bool(snowball.get("enabled", _SNOWBALL_DEFAULTS.enabled)),
         snowball_direction=str(snowball.get("direction", _SNOWBALL_DEFAULTS.direction)),
@@ -218,6 +224,8 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
         _set(dedup, "title_threshold", values.dedup_title_threshold)
 
     flt = _table(doc, "filter")
+    if "concept_mode" in flt or values.concept_mode != _FILTER_DEFAULTS.concept_mode:
+        _set(flt, "concept_mode", values.concept_mode)
     _set_concepts(flt, values.filter_concepts)
     keyword = _table(flt, "keyword")
     _set(keyword, "exclude", values.exclude)
@@ -228,6 +236,8 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
     if "host" in llm or values.llm_host != _LLM_DEFAULTS.host:
         _set(llm, "host", values.llm_host)
     _set(llm, "threshold", values.llm_threshold)
+    if "review_margin" in llm or values.review_margin != _LLM_DEFAULTS.review_margin:
+        _set(llm, "review_margin", values.review_margin)
 
     if values.extend_xlsx.strip():
         extend = _table(doc, "extend")
