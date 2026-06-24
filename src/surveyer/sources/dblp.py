@@ -28,7 +28,11 @@ def parse_dblp(raw: dict) -> list[Record]:
     for hit in hits:
         info = hit.get("info", {})
         authors_field = info.get("authors", {}).get("author")
-        authors = [a["text"] for a in _as_list(authors_field)]
+        authors = [
+            t
+            for a in _as_list(authors_field)
+            if (t := (a.get("text") if isinstance(a, dict) else a))
+        ]
         year = info.get("year")
         out.append(
             Record(
