@@ -40,6 +40,7 @@ _SCHEMA: SchemaDict = {
     "exclusion_reason": pl.Utf8,
     "bibtex": pl.Utf8,
     "bibtex_source": pl.Utf8,
+    "status": pl.Utf8,
 }
 
 _COLUMNS = list(_SCHEMA)
@@ -72,6 +73,7 @@ _COLUMN_WIDTHS: ColumnWidthsDefinition = {
     "exclusion_reason": 180,
     "bibtex": 360,
     "bibtex_source": 90,
+    "status": 90,
 }
 
 # Yellow (low) to green (high) colour scale over the 0..1 llm_score.
@@ -101,9 +103,14 @@ _BIBTEX_FLAG: ConditionalFormatDict = {
 }
 
 
-def _record_row(r: Record) -> dict:
+def concept_column(name: str) -> str:
+    """Return the export header for a concept's per-record LLM verdict column."""
+    return f"concept: {name}"
+
+
+def _record_row(r: Record, concept_names: list[str] | None = None) -> dict:
     """Map one record onto the export schema's column names."""
-    return {
+    row = {
         "title": r.title,
         "authors": "; ".join(r.authors),
         "year": r.year,
@@ -120,12 +127,25 @@ def _record_row(r: Record) -> dict:
         "exclusion_reason": r.exclusion_reason,
         "bibtex": r.bibtex,
         "bibtex_source": r.bibtex_source,
+        "status": r.screening_status,
     }
+    for name in concept_names or []:
+        row[concept_column(name)] = r.concept_verdicts.get(name)
+    return row
 
 
-def _to_frame(records: list[Record]) -> pl.DataFrame:
-    rows = [_record_row(r) for r in records]
-    return pl.DataFrame(rows, schema=_SCHEMA).select(_COLUMNS)
+def _to_frame(
+    records: list[Record], concept_names: list[str] | None = None
+) -> pl.DataFrame:
+    """Build a Polars DataFrame from a list of records."""
+    schema = dict(_SCHEMA)
+    columns = list(_COLUMNS)
+    for name in concept_names or []:
+        col = concept_column(name)
+        schema[col] = pl.Utf8
+        columns.append(col)
+    rows = [_record_row(r, concept_names) for r in records]
+    return pl.DataFrame(rows, schema=schema).select(columns)
 
 
 def _retrieval_frame(ledger: Ledger) -> pl.DataFrame:
@@ -163,6 +183,7 @@ def _summary_frame(ledger: Ledger) -> pl.DataFrame:
         ("after_dedup", ledger.after_dedup()),
         ("excluded_keyword", ledger.excluded_keyword),
         ("excluded_llm", ledger.excluded_llm),
+        ("borderline", ledger.borderline),
         ("included", ledger.included),
     ]
     if ledger.snowball is not None:
@@ -203,6 +224,7 @@ def export_xlsx(
     excluded: list[Record],
     ledger: Ledger,
     path: str | Path,
+    concept_names: list[str] | None = None,
 ) -> None:
     """Write kept and excluded records and a ledger summary to a .xlsx."""
     path = Path(path)
@@ -210,7 +232,7 @@ def export_xlsx(
     wb = xlsxwriter.Workbook(str(path))
     try:
         # Deep-copy the combined conditional formats on each call
-        _to_frame(kept).write_excel(
+        _to_frame(kept, concept_names).write_excel(
             workbook=wb,
             worksheet="papers",
             header_format=_HEADER_FORMAT,
@@ -219,7 +241,7 @@ def export_xlsx(
             row_heights=_ROW_HEIGHT,
             freeze_panes=(1, 0),
         )
-        _to_frame(excluded).write_excel(
+        _to_frame(excluded, concept_names).write_excel(
             workbook=wb,
             worksheet="excluded",
             header_format=_HEADER_FORMAT,
@@ -251,12 +273,13 @@ def export_csv(
     excluded: list[Record],
     ledger: Ledger,
     out_dir: str | Path,
+    concept_names: list[str] | None = None,
 ) -> None:
     """Write kept and excluded records and a ledger summary as CSV files."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    _to_frame(kept).write_csv(out_dir / "papers.csv")
-    _to_frame(excluded).write_csv(out_dir / "excluded.csv")
+    _to_frame(kept, concept_names).write_csv(out_dir / "papers.csv")
+    _to_frame(excluded, concept_names).write_csv(out_dir / "excluded.csv")
     _summary_frame(ledger).write_csv(out_dir / "summary.csv")
     _retrieval_frame(ledger).write_csv(out_dir / "retrieval.csv")
 
@@ -267,23 +290,26 @@ def export_results(
     ledger: Ledger,
     out_dir: str | Path,
     fmt: str = "xlsx",
+    concept_names: list[str] | None = None,
 ) -> None:
     """Export results to out_dir in the requested format ("xlsx" or "csv")."""
     out_dir = Path(out_dir)
     if fmt == "csv":
-        export_csv(kept, excluded, ledger, out_dir)
+        export_csv(kept, excluded, ledger, out_dir, concept_names)
     elif fmt == "xlsx":
-        export_xlsx(kept, excluded, ledger, out_dir / "survey.xlsx")
+        export_xlsx(kept, excluded, ledger, out_dir / "survey.xlsx", concept_names)
     else:
         raise ValueError(f"Unknown export format: {fmt!r}")
     export_bibtex(kept, out_dir)
 
 
-def _append_records(ws, records: list[Record]) -> None:
+def _append_records(
+    ws, records: list[Record], concept_names: list[str] | None = None
+) -> None:
     """Append records below existing rows, matching columns by header name."""
     header = [cell.value for cell in ws[1]]
     for r in records:
-        row = _record_row(r)
+        row = _record_row(r, concept_names)
         ws.append([row.get(name) for name in header])
 
 
@@ -363,14 +389,15 @@ def export_extended_xlsx(
     new_excluded: list[Record],
     ledger: Ledger,
     path: str | Path,
+    concept_names: list[str] | None = None,
 ) -> None:
     """Copy the screened workbook to path and append the new run's records."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(baseline_path, path)
     wb = load_workbook(path)
-    _append_records(wb["papers"], new_kept)
-    _append_records(wb["excluded"], new_excluded)
+    _append_records(wb["papers"], new_kept, concept_names)
+    _append_records(wb["excluded"], new_excluded, concept_names)
     _patch_missing_bibtex(wb["papers"], all_kept)
     _rewrite_summary(wb, ledger)
     _rewrite_retrieval(wb, ledger)
@@ -384,10 +411,17 @@ def export_extended(
     new_excluded: list[Record],
     ledger: Ledger,
     out_dir: str | Path,
+    concept_names: list[str] | None = None,
 ) -> None:
     """Write the extended survey.xlsx plus references.bib for all included."""
     out_dir = Path(out_dir)
     export_extended_xlsx(
-        baseline_path, all_kept, new_kept, new_excluded, ledger, out_dir / "survey.xlsx"
+        baseline_path,
+        all_kept,
+        new_kept,
+        new_excluded,
+        ledger,
+        out_dir / "survey.xlsx",
+        concept_names,
     )
     export_bibtex(all_kept, out_dir)

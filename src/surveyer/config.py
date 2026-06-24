@@ -29,6 +29,17 @@ VALID_EXPORT_FORMATS = {"xlsx", "csv"}
 VALID_SNOWBALL_DIRECTIONS = {"backward", "forward", "both"}
 
 
+def resolve_required_concepts(mode: str, n_concepts: int) -> int:
+    """Return the minimum number of concepts that must match for the given mode."""
+    if mode == "any":
+        return 1
+    if mode == "all":
+        return max(1, n_concepts)
+    if mode.startswith("min:"):
+        return int(mode.split(":", 1)[1])
+    raise ValueError(f"Invalid concept_mode: {mode!r}")
+
+
 class ProjectConfig(msgspec.Struct, kw_only=True):
     """Project configuration."""
 
@@ -105,6 +116,7 @@ class LLMConfig(msgspec.Struct, kw_only=True):
     model: str = "gpt-4o-mini"
     host: str = "http://localhost:11434"
     threshold: float = 0.5
+    review_margin: float = 0.0
     survey_abstract: str = ""
 
 
@@ -112,6 +124,7 @@ class FilterConfig(msgspec.Struct, kw_only=True):
     """Filtering configuration."""
 
     concepts: dict[str, list[str]] | None = None
+    concept_mode: str = "any"  # "any" | "all" | "min:N"
     keyword: KeywordConfig = msgspec.field(default_factory=KeywordConfig)
     llm: LLMConfig = msgspec.field(default_factory=LLMConfig)
 
@@ -187,6 +200,23 @@ def load_config(path: str | Path) -> SurveyConfig:
         )
     _validate_concepts(cfg.search.concepts, "search.concepts")
     _validate_concepts(cfg.filter.concepts, "filter.concepts")
+    mode = cfg.filter.concept_mode
+    n_concepts = len(cfg.filter.concepts or {})
+    if mode not in ("any", "all"):
+        if not mode.startswith("min:") or not mode[4:].isdigit():
+            raise ValueError(
+                f'filter.concept_mode must be "any", "all", or "min:N"; got {mode!r}'
+            )
+        n = int(mode[4:])
+        if n < 1:
+            raise ValueError(
+                f"filter.concept_mode {mode!r}: N must be a positive integer"
+            )
+        if n_concepts and n > n_concepts:
+            raise ValueError(
+                f"filter.concept_mode {mode!r}: N must be between 1 and "
+                f"{n_concepts} (number of filter.concepts)"
+            )
     if cfg.filter.concepts and cfg.filter.keyword.include:
         log.warning(
             "filter.include_ignored",
@@ -221,6 +251,16 @@ def load_config(path: str | Path) -> SurveyConfig:
                 "snowball.max_results_per_seed must be a positive integer, "
                 f"got {cfg.snowball.max_results_per_seed}"
             )
+    if not 0.0 <= cfg.filter.llm.threshold <= 1.0:
+        raise ValueError(
+            "filter.llm.threshold must be between 0 and 1, "
+            f"got {cfg.filter.llm.threshold}"
+        )
+    if not 0.0 <= cfg.filter.llm.review_margin <= 1.0:
+        raise ValueError(
+            "filter.llm.review_margin must be between 0 and 1, "
+            f"got {cfg.filter.llm.review_margin}"
+        )
     if cfg.filter.llm.provider not in VALID_LLM_PROVIDERS:
         raise ValueError(
             f"Unknown LLM provider: {cfg.filter.llm.provider!r}. "

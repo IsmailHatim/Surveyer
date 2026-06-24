@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from surveyer.config import KeywordConfig
+from surveyer.config import KeywordConfig, resolve_required_concepts
 from surveyer.models import Record
 
 
@@ -12,7 +12,10 @@ def _haystack(r: Record) -> str:
 
 
 def _exclusion_reason(
-    record: Record, cfg: KeywordConfig, concepts: dict[str, list[str]] | None
+    record: Record,
+    cfg: KeywordConfig,
+    concepts: dict[str, list[str]] | None,
+    concept_mode: str,
 ) -> str | None:
     """Return the primary reason a record is excluded, or None if it is kept."""
     text = _haystack(record)
@@ -20,9 +23,15 @@ def _exclusion_reason(
         if term.lower() in text:
             return f"contains '{term}'"
     if concepts:
-        for concept, synonyms in concepts.items():
-            if not any(syn.lower() in text for syn in synonyms):
-                return f"no {concept}"
+        total = len(concepts)
+        required = resolve_required_concepts(concept_mode, total)
+        matched = sum(
+            1
+            for synonyms in concepts.values()
+            if any(syn.lower() in text for syn in synonyms)
+        )
+        if matched < required:
+            return f"matched {matched}/{total} concepts (need ≥{required})"
         return None
     if cfg.include and not any(term.lower() in text for term in cfg.include):
         return "no included keyword"
@@ -33,12 +42,13 @@ def apply_keyword_filter(
     records: list[Record],
     cfg: KeywordConfig,
     concepts: dict[str, list[str]] | None = None,
+    concept_mode: str = "any",
 ) -> tuple[list[Record], int, dict[str, int]]:
     """Return (kept records, number excluded, per-reason exclusion counts)."""
     kept: list[Record] = []
     reasons: dict[str, int] = {}
     for record in records:
-        reason = _exclusion_reason(record, cfg, concepts)
+        reason = _exclusion_reason(record, cfg, concepts, concept_mode)
         if reason is None:
             kept.append(record)
         else:

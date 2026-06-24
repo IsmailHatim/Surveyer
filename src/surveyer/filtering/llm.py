@@ -37,6 +37,8 @@ _SYSTEM = (
     'If no concept criteria are given, return an empty object for "concepts".'
 )
 
+_PROMPT_VERSION = "1"  # bump when _SYSTEM or the prompt shape changes
+
 
 def _render_user_prompt(
     survey_abstract: str,
@@ -57,17 +59,21 @@ def _render_user_prompt(
     return "\n".join(parts)
 
 
-def _parse_response(data: dict) -> tuple[float, str]:
-    """Extract (score, reason) from a scorer JSON payload."""
+def _parse_response(data: dict) -> tuple[float, str, dict[str, str]]:
+    """Extract (score, reason, verdicts) from a scorer JSON payload."""
     score = data.get("score")
-    if not isinstance(score, (int, float)):
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
         raise ValueError(f"LLM response missing numeric score: {data!r}")
+    score = max(0.0, min(1.0, float(score)))
     reason = str(data.get("reason", ""))
-    concepts = data.get("concepts")
-    if isinstance(concepts, dict) and concepts:
-        verdicts = ", ".join(f"{name}:{verdict}" for name, verdict in concepts.items())
-        reason = f"{verdicts} — {reason}" if reason else verdicts
-    return float(score), reason
+    raw = data.get("concepts")
+    verdicts: dict[str, str] = (
+        {str(k): str(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+    )
+    if verdicts:
+        rendered = ", ".join(f"{name}:{verdict}" for name, verdict in verdicts.items())
+        reason = f"{rendered} — {reason}" if reason else rendered
+    return score, reason, verdicts
 
 
 class Scorer(Protocol):
@@ -79,8 +85,8 @@ class Scorer(Protocol):
         record: Record,
         *,
         concepts: dict[str, list[str]] | None = None,
-    ) -> tuple[float, str]:
-        """Return (score 0..1, reason) for a candidate record against the survey."""
+    ) -> tuple[float, str, dict[str, str]]:
+        """Return (score, reason, verdicts) for a record against the survey."""
         ...
 
 
@@ -107,7 +113,7 @@ class OpenAIScorer:
         record: Record,
         *,
         concepts: dict[str, list[str]] | None = None,
-    ) -> tuple[float, str]:
+    ) -> tuple[float, str, dict[str, str]]:
         """Score a record against the survey abstract via the OpenAI chat API."""
         resp = self.client.chat.completions.create(
             model=self.model,
@@ -150,7 +156,7 @@ class OllamaScorer:
         record: Record,
         *,
         concepts: dict[str, list[str]] | None = None,
-    ) -> tuple[float, str]:
+    ) -> tuple[float, str, dict[str, str]]:
         """Score a record against the survey abstract via the Ollama chat API."""
         resp = self.client.chat(
             model=self.model,
@@ -191,10 +197,25 @@ class CachingScorer:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _cache_path(self, survey_abstract: str, record: Record) -> Path:
+    def _cache_path(
+        self,
+        survey_abstract: str,
+        record: Record,
+        concepts: dict[str, list[str]] | None,
+    ) -> Path:
+        """Return the cache file path for this (abstract, record, concepts) triple."""
         ident = record.doi or f"{record.title}|{record.abstract or ''}"
+        canon_concepts = (
+            sorted((k, sorted(v)) for k, v in concepts.items()) if concepts else []
+        )
         key = json.dumps(
-            {"ns": self.namespace, "survey": survey_abstract, "ident": ident},
+            {
+                "ns": self.namespace,
+                "prompt": _PROMPT_VERSION,
+                "survey": survey_abstract,
+                "ident": ident,
+                "concepts": canon_concepts,
+            },
             sort_keys=True,
         )
         digest = hashlib.sha256(key.encode()).hexdigest()[:32]
@@ -206,15 +227,19 @@ class CachingScorer:
         record: Record,
         *,
         concepts: dict[str, list[str]] | None = None,
-    ) -> tuple[float, str]:
-        """Return cached (score, reason) or delegate to inner scorer and cache."""
-        cache = self._cache_path(survey_abstract, record)
+    ) -> tuple[float, str, dict[str, str]]:
+        """Return cached (score, reason, verdicts) or delegate and cache."""
+        cache = self._cache_path(survey_abstract, record, concepts)
         if cache.exists():
             data = json.loads(cache.read_text())
-            return data["score"], data["reason"]
-        value, reason = self.inner.score(survey_abstract, record, concepts=concepts)
-        cache.write_text(json.dumps({"score": value, "reason": reason}))
-        return value, reason
+            return data["score"], data["reason"], data.get("verdicts", {})
+        value, reason, verdicts = self.inner.score(
+            survey_abstract, record, concepts=concepts
+        )
+        cache.write_text(
+            json.dumps({"score": value, "reason": reason, "verdicts": verdicts})
+        )
+        return value, reason, verdicts
 
 
 def apply_llm_filter(
@@ -224,29 +249,46 @@ def apply_llm_filter(
     *,
     concepts: dict[str, list[str]] | None = None,
     cancel: threading.Event | None = None,
-) -> tuple[list[Record], int]:
-    """Score each record; keep those above threshold. Returns (kept, excluded)."""
+) -> tuple[list[Record], int, int]:
+    """Score each record; route to include/borderline/exclude."""
     if not cfg.enabled:
-        return records, 0
+        return records, 0, 0
 
+    lo = cfg.threshold - cfg.review_margin
     total = len(records)
     kept: list[Record] = []
+    borderline = 0
     for i, r in enumerate(records, start=1):
         check_cancelled(cancel)
         log.info("llm.scoring", done=i, total=total, title=r.title)
         try:
-            value, reason = scorer.score(cfg.survey_abstract, r, concepts=concepts)
+            value, reason, verdicts = scorer.score(
+                cfg.survey_abstract, r, concepts=concepts
+            )
         except Exception as exc:
             log.warning("llm.score_failed", title=r.title, error=str(exc))
             r.llm_score = None
             r.llm_reason = "scoring failed - review manually"
+            r.screening_status = "borderline"
             kept.append(r)  # not scored records are kept for manual review
             continue
         r.llm_score = value
         r.llm_reason = reason
+        r.concept_verdicts = verdicts
         if value >= cfg.threshold:
+            r.screening_status = "include"
+            kept.append(r)
+        elif value >= lo:
+            r.screening_status = "borderline"
+            r.llm_reason = (
+                f"borderline ({value:.2f}) — {reason}"
+                if reason
+                else (f"borderline ({value:.2f})")
+            )
+            borderline += 1
             kept.append(r)
         else:
+            r.screening_status = "exclude"
             r.exclusion_reason = f"llm score {value:.2f} < threshold {cfg.threshold}"
-    log.info("llm.scoring_done", total=total, kept=len(kept))
-    return kept, len(records) - len(kept)
+    log.info("llm.scoring_done", total=total, kept=len(kept), borderline=borderline)
+    return kept, len(records) - len(kept), borderline
