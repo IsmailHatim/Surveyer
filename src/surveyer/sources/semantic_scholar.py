@@ -64,7 +64,9 @@ class SemanticScholarSource:
             batch = parse_s2(raw)
             out.extend(batch)
             nxt = raw.get("next")
-            if not batch or nxt is None:
+            # Guard a non-advancing `next` (<= current offset) so we don't
+            # refetch the same page and emit duplicates.
+            if not batch or nxt is None or nxt <= offset:
                 break
             offset = nxt
         return SearchResult(records=out[:max_results], api_total=api_total)
