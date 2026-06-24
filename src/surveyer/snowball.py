@@ -8,7 +8,7 @@ from pathlib import Path
 import msgspec
 import structlog
 
-from surveyer.cancel import check_cancelled
+from surveyer.cancel import PipelineCancelled, check_cancelled
 from surveyer.config import SnowballConfig, SurveyConfig
 from surveyer.dedup import deduplicate
 from surveyer.export import export_extended
@@ -19,7 +19,7 @@ from surveyer.ledger import save_ledger
 from surveyer.models import Ledger, QueryRetrieval, Record, SnowballLedger
 from surveyer.prisma import render_prisma
 from surveyer.sources.base import HttpClient
-from surveyer.sources.openalex import API, PAGE_SIZE, parse_openalex
+from surveyer.sources.openalex import API, PAGE_SIZE, _strip_doi, parse_openalex
 
 log = structlog.get_logger()
 
@@ -131,9 +131,13 @@ class OpenAlexSnowball:
 
     def _resolve(self, doi: str) -> dict | None:
         """Look a seed up by DOI; return the OpenAlex work or None if not found."""
-        url = f"{API}/doi:{doi.strip()}"
+        # OpenAlex wants a bare DOI; a full https://doi.org/... URL 404s.
+        clean = _strip_doi(doi) or doi.strip()
+        url = f"{API}/doi:{clean}"
         try:
             return self.client.get_json(url, params={"select": "id,referenced_works"})
+        except PipelineCancelled:
+            raise
         except Exception as exc:  # noqa: BLE001 - any failure means "skip this seed"
             log.warning("snowball.resolve_failed", doi=doi, error=str(exc))
             return None
