@@ -82,6 +82,25 @@ def test_seed_without_doi_is_skipped(tmp_path):
     assert result.candidates == []
 
 
+def test_full_url_seed_doi_is_stripped(tmp_path):
+    # A seed whose DOI is a full https://doi.org/... URL must resolve: OpenAlex
+    # wants a bare DOI, so the prefix has to be stripped before /doi: lookup.
+    seen_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        return _handler(request)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    sb = OpenAlexSnowball(client)
+    seeds = [Record(title="Seed", doi="https://doi.org/10.1/seed")]
+    result = sb.fetch(seeds, SnowballConfig(enabled=True, direction="backward"))
+    assert result.seeds_resolved == 1
+    doi_path = next(p for p in seen_paths if "/doi:" in p)
+    assert "/doi:10.1/seed" in doi_path
+    assert "doi.org" not in doi_path
+
+
 def test_forward_is_capped(tmp_path):
     def many(request: httpx.Request) -> httpx.Response:
         path = request.url.path

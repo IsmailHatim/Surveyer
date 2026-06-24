@@ -64,6 +64,23 @@ def test_unknown_source_rejected(tmp_path):
         load_config(p)
 
 
+def test_year_min_after_year_max_rejected(tmp_path):
+    bad = SAMPLE.replace("year_max = 2026", "year_max = 2010")
+    p = tmp_path / "survey.toml"
+    p.write_text(bad)
+    with pytest.raises(ValueError, match="year_min"):
+        load_config(p)
+
+
+@pytest.mark.parametrize("bad", [0, -5])
+def test_non_positive_max_results_rejected(tmp_path, bad):
+    cfg = SAMPLE.replace("max_results_per_query = 100", f"max_results_per_query = {bad}")
+    p = tmp_path / "survey.toml"
+    p.write_text(cfg)
+    with pytest.raises(ValueError, match="max_results_per_query"):
+        load_config(p)
+
+
 def test_llm_enabled_requires_abstract(tmp_path):
     bad = SAMPLE.replace('survey_abstract = "We survey X."', 'survey_abstract = ""')
     p = tmp_path / "survey.toml"

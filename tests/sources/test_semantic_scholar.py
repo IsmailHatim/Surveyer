@@ -75,6 +75,27 @@ def test_s2_search_stops_at_max_results(tmp_path):
     assert len(result.records) == 120
 
 
+def test_s2_search_stops_on_non_advancing_next(tmp_path):
+    # A `next` that doesn't move past the current offset must not refetch the
+    # same page forever; the search returns just the first page.
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        offset = int(request.url.params.get("offset", "0"))
+        data = [{"title": f"P{i}", "externalIds": {}, "authors": []} for i in range(5)]
+        # `next` equals the current offset → non-advancing.
+        return httpx.Response(
+            200, json={"total": 9999, "offset": offset, "next": offset, "data": data}
+        )
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    result = SemanticScholarSource(client).search("x", max_results=120)
+    assert calls == 1
+    assert len(result.records) == 5
+
+
 def test_s2_search_returns_api_total(tmp_path):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

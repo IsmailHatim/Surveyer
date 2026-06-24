@@ -115,6 +115,17 @@ def test_extend_section_added_and_removed():
     assert "extend" not in tomlkit.dumps(doc)
 
 
+def test_clearing_extend_xlsx_preserves_sibling_keys():
+    # Clearing the xlsx should drop only that key, not a sibling under [extend].
+    doc = tomlkit.parse(SAMPLE + '\n[extend]\nxlsx = "runs/v1/survey.xlsx"\nnote = "keep me"\n')
+    v = extract_form(doc)
+    v.extend_xlsx = ""
+    apply_form(doc, v)
+    out = tomlkit.dumps(doc)
+    assert "runs/v1/survey.xlsx" not in out
+    assert "keep me" in out
+
+
 def test_year_cleared_removes_key():
     doc = tomlkit.parse(SAMPLE)
     v = extract_form(doc)
