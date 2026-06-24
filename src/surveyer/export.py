@@ -326,6 +326,8 @@ def _rewrite_summary(wb, ledger: Ledger) -> None:
 
 def _rewrite_retrieval(wb, ledger: Ledger) -> None:
     """Replace the retrieval sheet with the new run's per-query detail."""
+    if not ledger.retrieval:
+        return
     if "retrieval" in wb.sheetnames:
         del wb["retrieval"]
     ws = wb.create_sheet("retrieval")
