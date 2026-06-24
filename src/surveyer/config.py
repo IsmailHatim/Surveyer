@@ -198,6 +198,20 @@ def load_config(path: str | Path) -> SurveyConfig:
             f"dedup.title_threshold must be between 0 and 100, "
             f"got {cfg.dedup.title_threshold}"
         )
+    if cfg.search.max_results_per_query <= 0:
+        raise ValueError(
+            "search.max_results_per_query must be a positive integer, "
+            f"got {cfg.search.max_results_per_query}"
+        )
+    if (
+        cfg.search.year_min is not None
+        and cfg.search.year_max is not None
+        and cfg.search.year_min > cfg.search.year_max
+    ):
+        raise ValueError(
+            f"search.year_min ({cfg.search.year_min}) must be "
+            f"<= search.year_max ({cfg.search.year_max})"
+        )
     _validate_concepts(cfg.search.concepts, "search.concepts")
     _validate_concepts(cfg.filter.concepts, "filter.concepts")
     mode = cfg.filter.concept_mode
