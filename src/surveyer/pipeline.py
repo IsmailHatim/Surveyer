@@ -97,7 +97,10 @@ def run_pipeline(
 
     # 3. Keyword filter
     after_kw, excluded_kw, kw_reasons = apply_keyword_filter(
-        deduped, cfg.filter.keyword, concepts=cfg.filter.concepts
+        deduped,
+        cfg.filter.keyword,
+        concepts=cfg.filter.concepts,
+        concept_mode=cfg.filter.concept_mode,
     )
     ledger.excluded_keyword = excluded_kw
     ledger.excluded_keyword_reasons = kw_reasons
@@ -107,7 +110,7 @@ def run_pipeline(
 
     # 4. LLM filter (scorer was built up front, before fetching)
     if cfg.filter.llm.enabled and scorer is not None:
-        after_llm, excluded_llm = apply_llm_filter(
+        after_llm, excluded_llm, borderline = apply_llm_filter(
             after_kw,
             cfg.filter.llm,
             scorer,
@@ -115,8 +118,9 @@ def run_pipeline(
             cancel=cancel,
         )
     else:
-        after_llm, excluded_llm = after_kw, 0
+        after_llm, excluded_llm, borderline = after_kw, 0, 0
     ledger.excluded_llm = excluded_llm
+    ledger.borderline = borderline
     kept_llm_ids = {id(r) for r in after_llm}
     dropped.extend(r for r in after_kw if id(r) not in kept_llm_ids)
 
@@ -164,14 +168,26 @@ def run_pipeline(
         kept_all, excluded_all = new_includes, dropped
 
     # 5. Persist outputs
+    concept_names = list(cfg.filter.concepts or {})
     save_ledger(ledger, out_dir / "ledger.json")
     if baseline is not None and cfg.extend is not None:
         export_extended(
-            cfg.extend.xlsx, kept_all, new_includes, dropped, ledger, out_dir
+            cfg.extend.xlsx,
+            kept_all,
+            new_includes,
+            dropped,
+            ledger,
+            out_dir,
+            concept_names=concept_names,
         )
     else:
         export_results(
-            new_includes, dropped, ledger, out_dir, fmt=cfg.project.export_format
+            new_includes,
+            dropped,
+            ledger,
+            out_dir,
+            fmt=cfg.project.export_format,
+            concept_names=concept_names,
         )
     log.info("export.done", out_dir=str(out_dir), fmt=cfg.project.export_format)
     render_prisma(

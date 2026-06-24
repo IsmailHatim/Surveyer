@@ -7,6 +7,7 @@ from openpyxl.styles import PatternFill
 
 from surveyer.export import (
     _to_frame,
+    concept_column,
     export_bibtex,
     export_csv,
     export_extended,
@@ -414,3 +415,33 @@ def test_retrieval_frame_includes_snowball_rows():
     labels = frame["query_label"].to_list()
     assert "q" in labels
     assert "snowball:backward" in labels
+
+
+def test_status_and_concept_columns_appended():
+    r = Record(title="t", screening_status="borderline",
+               concept_verdicts={"graph": "yes", "multimodal": "no"})
+    frame = _to_frame([r], concept_names=["graph", "multimodal"])
+    cols = frame.columns
+    assert "status" in cols
+    assert concept_column("graph") == "concept: graph"
+    assert cols[-2:] == ["concept: graph", "concept: multimodal"]
+    row = frame.to_dicts()[0]
+    assert row["status"] == "borderline"
+    assert row["concept: graph"] == "yes"
+    assert row["concept: multimodal"] == "no"
+
+
+def test_no_concepts_keeps_fixed_schema_plus_status():
+    frame = _to_frame([Record(title="t")], concept_names=None)
+    assert "status" in frame.columns
+    assert not any(c.startswith("concept: ") for c in frame.columns)
+    assert frame["status"].dtype == pl.Utf8
+
+
+def test_summary_frame_includes_borderline_row():
+    from surveyer.export import _summary_frame
+    from surveyer.models import Ledger
+
+    frame = _summary_frame(Ledger(included=5, borderline=2))
+    rows = dict(zip(frame["stage"].to_list(), frame["count"].to_list()))
+    assert rows["borderline"] == 2

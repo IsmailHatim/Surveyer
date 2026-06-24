@@ -93,11 +93,11 @@ class HttpClient:
         self._last_call = 0.0
 
     def _retry_wait(self, attempt: int, retry_after: str | None = None) -> float:
-        """Exponential backoff, capped, with the server's Retry-After winning."""
+        """Exponential backoff, capped; server Retry-After also capped at max."""
         if retry_after:
             seconds = _parse_retry_after(retry_after)
             if seconds is not None:
-                return seconds
+                return min(seconds, self.max_backoff)
         return min(self.backoff * (2 ** (attempt - 1)), self.max_backoff)
 
     def _cache_path(

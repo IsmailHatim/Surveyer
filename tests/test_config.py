@@ -538,3 +538,71 @@ def test_snowball_rejects_nonpositive_cap(tmp_path):
     )
     with pytest.raises(ValueError, match="max_results_per_seed"):
         load_config(p)
+
+
+# --- Task 2: concept_mode, review_margin, validation ---
+
+
+def _write(tmp_path, body: str):
+    p = tmp_path / "c.toml"
+    p.write_text(
+        '[project]\nname = "t"\n[search]\nsources = ["openalex"]\n'
+        'queries = [{label="a", terms="x"}]\n' + body
+    )
+    return p
+
+
+def test_resolve_required_concepts():
+    from surveyer.config import resolve_required_concepts
+
+    assert resolve_required_concepts("any", 3) == 1
+    assert resolve_required_concepts("all", 3) == 3
+    assert resolve_required_concepts("min:2", 3) == 2
+
+
+def test_concept_mode_default_is_any(tmp_path):
+    from surveyer.config import load_config
+
+    cfg = load_config(_write(tmp_path, ""))
+    assert cfg.filter.concept_mode == "any"
+
+
+def test_bad_concept_mode_rejected(tmp_path):
+    from surveyer.config import load_config
+
+    with pytest.raises(ValueError, match="concept_mode"):
+        load_config(_write(tmp_path, '[filter]\nconcept_mode = "some"\n'))
+
+
+def test_min_n_out_of_range_rejected(tmp_path):
+    from surveyer.config import load_config
+
+    body = (
+        '[filter]\nconcept_mode = "min:4"\n'
+        "[filter.concepts]\na = [\"x\"]\nb = [\"y\"]\n"
+    )
+    with pytest.raises(ValueError, match="concept_mode"):
+        load_config(_write(tmp_path, body))
+
+
+def test_min_zero_rejected_without_concepts(tmp_path):
+    from surveyer.config import load_config
+
+    with pytest.raises(ValueError, match="concept_mode"):
+        load_config(_write(tmp_path, '[filter]\nconcept_mode = "min:0"\n'))
+
+
+def test_threshold_range_validated(tmp_path):
+    from surveyer.config import load_config
+
+    body = '[filter.llm]\nenabled = true\nsurvey_abstract = "s"\nthreshold = 1.5\n'
+    with pytest.raises(ValueError, match="threshold"):
+        load_config(_write(tmp_path, body))
+
+
+def test_review_margin_range_validated(tmp_path):
+    from surveyer.config import load_config
+
+    body = '[filter.llm]\nreview_margin = 2.0\n'
+    with pytest.raises(ValueError, match="review_margin"):
+        load_config(_write(tmp_path, body))

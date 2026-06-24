@@ -201,13 +201,16 @@ def snowball_stage(
 
     # Keyword filter, then LLM filter, mirroring the main pipeline.
     after_kw, excluded_kw, kw_reasons = apply_keyword_filter(
-        fresh, cfg.filter.keyword, concepts=cfg.filter.concepts
+        fresh,
+        cfg.filter.keyword,
+        concepts=cfg.filter.concepts,
+        concept_mode=cfg.filter.concept_mode,
     )
     kept_kw_ids = {id(r) for r in after_kw}
     excluded: list[Record] = [r for r in fresh if id(r) not in kept_kw_ids]
 
     if cfg.filter.llm.enabled and scorer is not None:
-        after_llm, _ = apply_llm_filter(
+        after_llm, _, _ = apply_llm_filter(
             after_kw,
             cfg.filter.llm,
             scorer,
@@ -291,7 +294,15 @@ def run_snowball(
     save_ledger(ledger, out_dir / "ledger.json")
 
     kept_all = baseline.included + kept_b
-    export_extended(papers_xlsx, kept_all, kept_b, excluded_b, ledger, out_dir)
+    export_extended(
+        papers_xlsx,
+        kept_all,
+        kept_b,
+        excluded_b,
+        ledger,
+        out_dir,
+        concept_names=list(cfg.filter.concepts or {}),
+    )
     render_prisma(
         ledger,
         cfg.search,

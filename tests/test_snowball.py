@@ -155,7 +155,7 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
 
     class FakeScorer:
         def score(self, survey_abstract, record, *, concepts=None):
-            return (0.9, "ok") if "graph" in (record.abstract or "") else (0.1, "no")
+            return (0.9, "ok", {}) if "graph" in (record.abstract or "") else (0.1, "no", {})
 
     already = [Record(title="Already seen paper", doi="10.1/seen")]
     seeds = [Record(title="Seed", doi="10.1/seed")]
@@ -222,7 +222,7 @@ def test_run_snowball_appends_to_workbook(tmp_path):
 
     class FakeScorer:
         def score(self, survey_abstract, record, *, concepts=None):
-            return (0.9, "ok")
+            return (0.9, "ok", {})
 
     result = run_snowball(
         cfg,

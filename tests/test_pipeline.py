@@ -38,7 +38,7 @@ class FakeSource:
 
 class FakeScorer:
     def score(self, survey_abstract, record, *, concepts=None):
-        return (0.9, "ok") if "relevant" in (record.abstract or "") else (0.1, "no")
+        return (0.9, "ok", {}) if "relevant" in (record.abstract or "") else (0.1, "no", {})
 
 
 def _cfg(tmp_path) -> SurveyConfig:

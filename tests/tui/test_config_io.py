@@ -351,3 +351,26 @@ def test_snowball_enable_roundtrip():
     assert back.snowball_enabled is True
     assert back.snowball_direction == "backward"
     assert back.snowball_max_results_per_seed == 50
+
+
+def test_concept_mode_and_review_margin_round_trip(tmp_path):
+    """concept_mode and review_margin are read, written, and re-read correctly."""
+    from surveyer.tui.config_io import load_document
+
+    p = tmp_path / "c.toml"
+    p.write_text(
+        '[project]\nname = "t"\n[search]\nsources = ["openalex"]\n'
+        'queries = [{label="a", terms="x"}]\n'
+        '[filter]\nconcept_mode = "all"\n'
+        '[filter.llm]\nreview_margin = 0.1\n'
+    )
+    doc = load_document(p)
+    form = extract_form(doc)
+    assert form.concept_mode == "all"
+    assert form.review_margin == 0.1
+    form.concept_mode = "min:2"
+    form.review_margin = 0.2
+    apply_form(doc, form)
+    reparsed = extract_form(doc)
+    assert reparsed.concept_mode == "min:2"
+    assert reparsed.review_margin == 0.2

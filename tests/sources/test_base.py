@@ -271,3 +271,10 @@ def test_get_text_sends_per_call_headers(tmp_path):
         "https://doi.org/10.1/x", headers={"Accept": "application/x-bibtex"}
     )
     assert seen["accept"] == "application/x-bibtex"
+
+
+def test_retry_after_capped_at_max_backoff(tmp_path):
+    """Retry-After header is capped at max_backoff to prevent long hangs."""
+    client = HttpClient(cache_dir=tmp_path, max_backoff=60.0)
+    assert client._retry_wait(1, retry_after="3600") == 60.0
+    assert client._retry_wait(1, retry_after="5") == 5.0

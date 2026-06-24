@@ -108,17 +108,27 @@ uv run --env-file .env surveyer run --config examples/survey.toml
 ### Concept groups
 
 Rather than handwriting every keyword combination, you can declare concept blocks of
-synonyms. Synonyms within a concept are OR statements; concepts combine with
-AND. `[search.concepts]` expands the cross-product into queries, while `[filter.concepts]`
-keeps a record only if it matches one synonym from **every** concept and contains
-no `exclude` term. The two are independent, so you can do a vast search but keep
-only records that cover all concepts.
+synonyms. Synonyms within a concept are OR statements. `[search.concepts]` expands the
+cross-product into queries, while `[filter.concepts]` screens records against the concepts
+(an `exclude` term always drops a record). The two are independent, so you can do a vast
+search but keep only the records that cover your concepts.
+
+How many concept blocks a record must match in the keyword stage is set by
+`[filter] concept_mode`:
+
+- `any` (default) — match **≥1** concept. Keeps the keyword stage as a cheap pre-filter and
+  lets the LLM do the real relevance judging (best recall).
+- `all` — match **every** concept (strict AND-gate).
+- `min:N` — match **≥N** concepts.
 
 ```toml
 [search.concepts]   # [filter.concepts] works the same way
 federated = ["federated learning", "federated averaging"]
 security  = ["secure aggregation", "model poisoning", "byzantine robust"]
 privacy   = ["differential privacy", "privacy preserving"]
+
+[filter]
+concept_mode = "any"   # any | all | min:N
 ```
 
 Generated queries are added to any explicit `[[search.queries]]`. 
@@ -134,6 +144,12 @@ LLM relevance scoring runs through `filter.llm`. Two providers are supported:
   API key needed. Install the extra (`uv sync --extra ollama`), then set
   `provider = "ollama"`, the `model` name, and `host` (default
   `http://localhost:11434`).
+
+Each record scores 0–1 against your survey abstract; those below `threshold` are excluded.
+Set `[filter.llm] review_margin` to open a **borderline** band: records scoring in
+`[threshold - margin, threshold)` are kept and flagged `borderline` in the `papers` sheet's
+`status` column for manual review (`0` = off). Per-concept verdicts (`yes`/`partial`/`no`)
+are exported as `concept: <name>` columns so a score is auditable.
 
 ## Extend a screened survey
 

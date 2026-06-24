@@ -121,6 +121,8 @@ class DashboardScreen(Screen):
                     yield Static("filters", classes="section-title")
                     yield Label("Keyword exclude (comma-separated)")
                     yield Input(value=", ".join(v.exclude), id="exclude")
+                    yield Label("Concept mode (any | all | min:N)")
+                    yield Input(value=v.concept_mode, id="concept_mode")
                     yield Checkbox(
                         "LLM relevance filter", value=v.llm_enabled, id="llm_enabled"
                     )
@@ -143,6 +145,8 @@ class DashboardScreen(Screen):
                             yield Input(value=str(v.llm_threshold), id="llm_threshold")
                     yield Label("Ollama host (used when provider = ollama)")
                     yield Input(value=v.llm_host, id="llm_host")
+                    yield Label("Review margin (borderline band below threshold)")
+                    yield Input(value=str(v.review_margin), id="review_margin")
 
                     yield Static("extend", classes="section-title")
                     yield Label("Screened xlsx (blank = off; needs xlsx export)")
@@ -263,6 +267,9 @@ class DashboardScreen(Screen):
                 llm_model=self.query_one("#llm_model", Input).value,
                 llm_host=self.query_one("#llm_host", Input).value,
                 llm_threshold=float(self.query_one("#llm_threshold", Input).value),
+                concept_mode=self.query_one("#concept_mode", Input).value.strip()
+                or "any",
+                review_margin=float(self.query_one("#review_margin", Input).value),
                 extend_xlsx=self.query_one("#extend_xlsx", Input).value,
                 snowball_enabled=self.query_one("#snowball_enabled", Checkbox).value,
                 snowball_direction=(
