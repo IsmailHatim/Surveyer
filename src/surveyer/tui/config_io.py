@@ -243,7 +243,13 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
         extend = _table(doc, "extend")
         _set(extend, "xlsx", values.extend_xlsx.strip())
     elif "extend" in doc:
-        del doc["extend"]
+        # Clear only the xlsx key; drop the table entirely only if nothing
+        # else lives under [extend], so future sibling keys survive.
+        extend = doc["extend"]
+        if "xlsx" in extend:
+            del extend["xlsx"]
+        if not extend:
+            del doc["extend"]
 
     if (
         "snowball" in doc
