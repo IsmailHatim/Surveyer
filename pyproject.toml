@@ -18,6 +18,7 @@ dependencies = [
     "xlsxwriter>=3.2",
     "openpyxl>=3.1",
     "graphviz>=0.20",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

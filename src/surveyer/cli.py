@@ -15,6 +15,15 @@ from surveyer.pipeline import run_pipeline
 app = typer.Typer(add_completion=False, help="Reproducible survey literature search.")
 
 
+def _load_dotenv() -> None:
+    """Load a ``.env`` from the current directory so API keys aren't lost."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(override=False)
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -23,6 +32,7 @@ def main(
     ),
 ) -> None:
     """Launch the interactive dashboard when no subcommand is given."""
+    _load_dotenv()
     if ctx.invoked_subcommand is not None:
         return
     try:
@@ -50,11 +60,25 @@ def run(
     """Run the full pipeline: fetch -> deduplication -> filter -> export -> prisma."""
     cfg = load_config(config)
     result = run_pipeline(cfg, refresh=refresh)
-    typer.echo(
-        f"Done. Identified {result.ledger.total_identified()}, "
-        f"included {result.ledger.included}. "
-        f"Outputs in {cfg.project.output_dir}/"
-    )
+    led = result.ledger
+    snow = led.snowball
+    if led.previously_included or snow is not None:
+        parts = [f"newly included {led.included}"]
+        if led.previously_included:
+            parts.insert(0, f"carried over {led.previously_included} screened")
+        if snow is not None:
+            parts.append(f"{snow.included} via citation searching")
+        typer.echo(
+            f"Done. Identified {led.total_identified()}, "
+            f"{', '.join(parts)} (total {led.total_included()}). "
+            f"Outputs in {cfg.project.output_dir}/"
+        )
+    else:
+        typer.echo(
+            f"Done. Identified {led.total_identified()}, "
+            f"included {led.included}. "
+            f"Outputs in {cfg.project.output_dir}/"
+        )
     n_local = sum(1 for r in result.kept if r.bibtex_source == "local")
     typer.echo(
         f"references.bib written ({len(result.kept)} entries,"
@@ -90,6 +114,8 @@ def fetch(
 @app.command()
 def prisma(config: str = typer.Option(..., "--config", "-c")) -> None:
     """Recreates the PRISMA diagram from the existing ledger."""
+    import msgspec
+
     from surveyer.ledger import load_ledger
     from surveyer.prisma import render_prisma
 
@@ -100,6 +126,13 @@ def prisma(config: str = typer.Option(..., "--config", "-c")) -> None:
     except FileNotFoundError:
         typer.echo(
             f"Error: no ledger.json found in {out}. Run surveyer run first.",
+            err=True,
+        )
+        raise typer.Exit(1) from None
+    except msgspec.DecodeError as exc:
+        typer.echo(
+            f"Error: ledger.json in {out} is corrupt or incomplete ({exc}). "
+            "Re-run surveyer run to regenerate it.",
             err=True,
         )
         raise typer.Exit(1) from None
