@@ -92,3 +92,16 @@ def test_total_included_adds_snowball():
     assert led.total_included() == 5
     led.snowball = SnowballLedger(included=4)
     assert led.total_included() == 9
+
+
+def test_record_has_screening_fields():
+    r = Record(title="x")
+    assert r.screening_status is None
+    assert r.concept_verdicts == {}
+    r.screening_status = "borderline"
+    r.concept_verdicts = {"graph": "yes"}
+    assert r.concept_verdicts["graph"] == "yes"
+
+
+def test_ledger_has_borderline_count():
+    assert Ledger().borderline == 0

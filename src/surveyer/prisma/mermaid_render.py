@@ -5,11 +5,23 @@ from __future__ import annotations
 from surveyer.prisma.model import PrismaModel
 
 
+def _esc(s: str) -> str:
+    """Escape Mermaid label specials to HTML entities (& first, then the rest)."""
+    return (
+        s.replace("&", "&amp;")
+        .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("[", "&#91;")
+        .replace("]", "&#93;")
+    )
+
+
 def _text(title: str, count: int | None) -> str:
     """Node label with an optional count on a second line."""
     if count is None:
-        return title
-    return f"{title}<br/>n = {count}"
+        return _esc(title)
+    return f"{_esc(title)}<br/>n = {count}"
 
 
 def to_mermaid(model: PrismaModel) -> str:
@@ -20,7 +32,7 @@ def to_mermaid(model: PrismaModel) -> str:
     for i, (name, count) in enumerate(model.sources):
         sid = f"src{i}"
         src_ids.append(sid)
-        lines.append(f'    {sid}["{name}<br/>n = {count}"]')
+        lines.append(f'    {sid}["{_esc(name)}<br/>n = {count}"]')
 
     first = model.rows[0].id
     for sid in src_ids:
@@ -33,7 +45,7 @@ def to_mermaid(model: PrismaModel) -> str:
             eid = f"{row.id}_excl"
             excl = _text(row.exclusion.label, row.exclusion.count)
             for reason, n in row.exclusion.breakdown:
-                excl += f"<br/>{reason}: {n}"
+                excl += f"<br/>{_esc(str(reason))}: {n}"
             lines.append(f'    {eid}["{excl}"]')
             lines.append(f"    {row.id} --> {eid}")
         if prev is not None:
@@ -47,7 +59,7 @@ def to_mermaid(model: PrismaModel) -> str:
             eid = f"{row.id}_excl"
             excl = _text(row.exclusion.label, row.exclusion.count)
             for reason, n in row.exclusion.breakdown:
-                excl += f"<br/>{reason}: {n}"
+                excl += f"<br/>{_esc(str(reason))}: {n}"
             lines.append(f'    {eid}["{excl}"]')
             lines.append(f"    {row.id} --> {eid}")
         if snow_prev is not None:
@@ -65,7 +77,7 @@ def to_mermaid(model: PrismaModel) -> str:
         lines.append("    previous --> total")
 
     if model.query_panel:
-        panel = model.query_panel.replace("\n", "<br/>")
+        panel = "<br/>".join(_esc(line) for line in model.query_panel.split("\n"))
         lines.append(f'    query["Search query<br/>{panel}"]')
         lines.append(f"    query -.-> {first}")
 
@@ -86,7 +98,8 @@ def _completeness_lines(model: PrismaModel) -> list[str]:
             total += "*"
         flag = " ⚠️" if c.truncated else ""
         truncated = truncated or c.truncated
-        parts.append(f"{c.source} · {c.requested} · {c.retrieved} · {total}{flag}")
+        line = f"{_esc(c.source)} · {c.requested} · {c.retrieved} · {total}{flag}"
+        parts.append(line)
     if truncated:
         parts.append("⚠️ retrieved fewer than the database reports — search capped")
     body = "<br/>".join(parts)

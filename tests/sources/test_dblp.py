@@ -108,3 +108,22 @@ def test_dblp_search_returns_api_total(tmp_path):
     result = DblpSource(client).search("x", max_results=10)
     assert result.api_total == 47
     assert [r.title for r in result.records] == ["P"]
+
+
+def test_parse_dblp_tolerates_malformed_authors():
+    raw = {
+        "result": {
+            "hits": {
+                "hit": [
+                    {
+                        "info": {
+                            "title": "A paper",
+                            "authors": {"author": [{"text": "Ada"}, {"@pid": "x"}, "Bob"]},
+                        }
+                    }
+                ]
+            }
+        }
+    }
+    records = parse_dblp(raw)
+    assert records[0].authors == ["Ada", "Bob"]

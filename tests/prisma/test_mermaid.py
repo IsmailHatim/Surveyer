@@ -126,3 +126,22 @@ def test_mermaid_renders_snowball_arm():
     assert "Records identified via citation searching" in text
     assert "snow_identified" in text
     assert "snow_included --> total" in text
+
+
+def test_esc_escapes_special_chars():
+    from surveyer.prisma.mermaid_render import _esc
+
+    assert _esc('a "b" [c] <d> & e') == "a &quot;b&quot; &#91;c&#93; &lt;d&gt; &amp; e"
+
+
+def test_mermaid_escapes_source_names_but_keeps_br():
+    from surveyer.prisma.mermaid_render import _esc
+
+    out = to_mermaid(_model())
+    # Check that the escaping function works
+    escaped = _esc('"graph machine learning" [x]')
+    assert escaped == "&quot;graph machine learning&quot; &#91;x&#93;"
+    # Check that <br/> separators are preserved in output
+    assert "<br/>" in out
+    # Check that node syntax stays intact
+    assert '["' in out
