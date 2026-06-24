@@ -43,6 +43,19 @@ def _citation_key(record: Record, seen: set[str]) -> str:
     return key
 
 
+def _escape_bibtex(value: str) -> str:
+    """Make a field value safe to wrap in braces for LaTeX/biber.
+
+    Escapes the special characters ``% # & _ $`` and strips stray braces so an
+    unbalanced ``{``/``}`` in source metadata can't break the synthesized entry.
+    """
+    value = value.replace("\\", "")  # drop backslashes so escapes stay literal
+    value = value.replace("{", "").replace("}", "")  # balance by removing braces
+    for ch in "%#&_$":
+        value = value.replace(ch, f"\\{ch}")
+    return value
+
+
 def build_local_entry(record: Record, *, seen: set[str]) -> str:
     """Construct a minimal @misc entry from whatever fields are present."""
     key = _citation_key(record, seen)
@@ -56,7 +69,9 @@ def build_local_entry(record: Record, *, seen: set[str]) -> str:
     howpublished = record.venue or record.url
     if howpublished:
         fields.append(("howpublished", howpublished))
-    body = ",\n".join(f"  {name} = {{{value}}}" for name, value in fields)
+    body = ",\n".join(
+        f"  {name} = {{{_escape_bibtex(value)}}}" for name, value in fields
+    )
     if body:
         return f"@misc{{{key},\n{body}\n}}"
     return f"@misc{{{key},\n}}"

@@ -171,3 +171,20 @@ def test_build_local_entry_with_minimal_fields():
     # No author/year/title -> stable fallback key, no crash.
     entry = build_local_entry(Record(title=""), seen=set())
     assert entry.startswith("@misc{ref,")
+
+
+def test_build_local_entry_escapes_special_chars():
+    # %, #, &, _, $ must be backslash-escaped and stray braces stripped so the
+    # synthesized entry doesn't break LaTeX/biber.
+    entry = build_local_entry(
+        Record(title="A 100% {great} survey of AI & ML_methods #1 for $X"),
+        seen=set(),
+    )
+    title_line = next(ln for ln in entry.splitlines() if "title" in ln)
+    assert r"100\%" in title_line
+    assert r"\&" in title_line
+    assert r"ML\_methods" in title_line
+    assert r"\#1" in title_line
+    assert r"\$X" in title_line
+    assert "{great}" not in title_line  # stray braces stripped
+    assert title_line.count("{") == 1 and title_line.count("}") == 1
