@@ -125,3 +125,20 @@ def test_ledger_has_borderline_count():
 
 def test_record_keyword_note_defaults_none():
     assert Record(title="x").keyword_note is None
+
+
+def test_seed_ledger_defaults_and_attaches():
+    from surveyer.models import Ledger, SeedLedger
+
+    sl = SeedLedger(imported=7, resolved=5, unresolved=2, pinned=5, collapsed_fetched=1)
+    assert (sl.imported, sl.resolved, sl.unresolved, sl.pinned, sl.collapsed_fetched) == (
+        7,
+        5,
+        2,
+        5,
+        1,
+    )
+    assert SeedLedger().imported == 0
+    led = Ledger(seed=sl)
+    assert led.seed is sl
+    assert Ledger().seed is None
