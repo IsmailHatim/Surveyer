@@ -70,6 +70,16 @@ class SnowballLedger(msgspec.Struct, kw_only=True):
     retrieval: list[QueryRetrieval] = []
 
 
+class SeedLedger(msgspec.Struct, kw_only=True):
+    """Per-stage counts for the must-cite seed (hand-search) injection."""
+
+    imported: int = 0  # ids listed in [seed]
+    resolved: int = 0  # ids resolved to a record (S2 or OpenAlex)
+    unresolved: int = 0  # ids that resolved nowhere
+    pinned: int = 0  # seed records force-included after self/baseline dedup
+    collapsed_fetched: int = 0  # fetched records dropped as duplicates of a seed
+
+
 class Ledger(msgspec.Struct, kw_only=True):
     """Provenance counts at each pipeline stage."""
 
@@ -85,6 +95,7 @@ class Ledger(msgspec.Struct, kw_only=True):
     already_screened: int = 0
     retrieval: list[QueryRetrieval] = []
     snowball: SnowballLedger | None = None
+    seed: SeedLedger | None = None
 
     def total_identified(self) -> int:
         """Records identified across all sources before deduplication."""
@@ -95,9 +106,10 @@ class Ledger(msgspec.Struct, kw_only=True):
         return self.total_identified() - self.duplicates_removed
 
     def total_included(self) -> int:
-        """Studies in the final review: carried over + main arm + snowball section."""
+        """Studies in the final review: carried over + main arm + snowball + seeds."""
         snow = self.snowball.included if self.snowball is not None else 0
-        return self.previously_included + self.included + snow
+        seeds = self.seed.pinned if self.seed is not None else 0
+        return self.previously_included + self.included + snow + seeds
 
     def truncated_sources(self) -> list[str]:
         """Sources with any query capped below the API's reported total."""

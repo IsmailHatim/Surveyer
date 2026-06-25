@@ -19,6 +19,7 @@ from surveyer.filtering.llm import Scorer, apply_llm_filter, build_scorer
 from surveyer.ledger import save_ledger
 from surveyer.models import Ledger, Record, SourceCount
 from surveyer.prisma import render_prisma
+from surveyer.seeds import SeedResolver, build_seed_resolver
 from surveyer.snowball import OpenAlexSnowball, build_openalex_client, snowball_stage
 from surveyer.sources import build_registry, fetch_all
 
@@ -46,6 +47,7 @@ def run_pipeline(
     refresh: bool = False,
     cancel: threading.Event | None = None,
     snowball: OpenAlexSnowball | None = None,
+    seed_resolver: SeedResolver | None = None,
 ) -> PipelineResult:
     """Run the full pipeline: fetch -> dedup -> filter -> bibtex -> export -> prisma."""
     out_dir = Path(cfg.project.output_dir)
@@ -95,6 +97,27 @@ def run_pipeline(
         ledger.already_screened = n_screened
         ledger.previously_included = len(baseline.included)
 
+    # 2ter. Resolve must-cite seeds and pin them (force-included, never filtered).
+    seed_records: list[Record] = []
+    if cfg.seed is not None and cfg.seed.ids:
+        if seed_resolver is None:
+            seed_resolver = build_seed_resolver(cache_root, refresh=refresh)
+        seed_records, seed_ledger = seed_resolver.resolve(cfg.seed.ids, cancel=cancel)
+        seed_records, _ = deduplicate(
+            seed_records, title_threshold=cfg.dedup.title_threshold
+        )
+        if baseline is not None:
+            seed_records, _ = split_already_screened(seed_records, baseline)
+        if seed_records:
+            deduped, collapsed = split_already_screened(
+                deduped, Baseline(included=seed_records, excluded=[])
+            )
+            seed_ledger.collapsed_fetched = collapsed
+        seed_ledger.pinned = len(seed_records)
+        ledger.seed = seed_ledger
+        log.info("seed.pinned", pinned=len(seed_records))
+        check_cancelled(cancel)
+
     # 3. Keyword filter
     gate = cfg.filter.keyword_gate
     if gate == "soft" and not cfg.filter.llm.enabled:
@@ -132,15 +155,21 @@ def run_pipeline(
     kept_llm_ids = {id(r) for r in after_llm}
     dropped.extend(r for r in after_kw if id(r) not in kept_llm_ids)
 
-    ledger.included = len(after_llm)  # main arm A (snowball counted separately)
+    ledger.included = len(
+        after_llm
+    )  # main arm A only (seeds: ledger.seed.pinned; snowball separate)
 
     check_cancelled(cancel)
 
     # 4ter. Snowball: chase refs/citations of the included set, screen the hits.
-    new_includes = after_llm
+    new_includes = after_llm + seed_records
     if cfg.snowball is not None and cfg.snowball.enabled:
-        seeds = (baseline.included if baseline is not None else []) + after_llm
-        already_seen = list(deduped)
+        seeds = (
+            (baseline.included if baseline is not None else [])
+            + after_llm
+            + seed_records
+        )
+        already_seen = list(deduped) + seed_records
         if baseline is not None:
             already_seen += baseline.included + baseline.excluded
         if snowball is None:
@@ -152,7 +181,7 @@ def run_pipeline(
         )
         ledger.snowball = snow_ledger
         dropped.extend(snow_excluded)
-        new_includes = after_llm + snow_kept
+        new_includes = after_llm + seed_records + snow_kept
         log.info("snowball.done", included=snow_ledger.included)
 
     # 4bis Resolve BibTeX for kept records (DBLP key -> DOI -> local fallback).
