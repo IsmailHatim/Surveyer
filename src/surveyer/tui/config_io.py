@@ -69,6 +69,7 @@ class FormValues(msgspec.Struct, kw_only=True):
     llm_host: str = msgspec.field(default=_LLM_DEFAULTS.host)
     llm_threshold: float = msgspec.field(default=_LLM_DEFAULTS.threshold)
     concept_mode: str = msgspec.field(default=_FILTER_DEFAULTS.concept_mode)
+    keyword_gate: str = msgspec.field(default=_FILTER_DEFAULTS.keyword_gate)
     review_margin: float = msgspec.field(default=_LLM_DEFAULTS.review_margin)
     extend_xlsx: str = ""
     snowball_enabled: bool = msgspec.field(default=_SNOWBALL_DEFAULTS.enabled)
@@ -189,6 +190,7 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         llm_host=str(llm.get("host", _LLM_DEFAULTS.host)),
         llm_threshold=float(llm.get("threshold", _LLM_DEFAULTS.threshold)),
         concept_mode=str(flt.get("concept_mode", _FILTER_DEFAULTS.concept_mode)),
+        keyword_gate=str(flt.get("keyword_gate", _FILTER_DEFAULTS.keyword_gate)),
         review_margin=float(llm.get("review_margin", _LLM_DEFAULTS.review_margin)),
         extend_xlsx=str(extend.get("xlsx", "")) if extend else "",
         snowball_enabled=bool(snowball.get("enabled", _SNOWBALL_DEFAULTS.enabled)),
@@ -226,6 +228,8 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
     flt = _table(doc, "filter")
     if "concept_mode" in flt or values.concept_mode != _FILTER_DEFAULTS.concept_mode:
         _set(flt, "concept_mode", values.concept_mode)
+    if "keyword_gate" in flt or values.keyword_gate != _FILTER_DEFAULTS.keyword_gate:
+        _set(flt, "keyword_gate", values.keyword_gate)
     _set_concepts(flt, values.filter_concepts)
     keyword = _table(flt, "keyword")
     _set(keyword, "exclude", values.exclude)
