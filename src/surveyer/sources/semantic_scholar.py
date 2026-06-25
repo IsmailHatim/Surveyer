@@ -8,31 +8,32 @@ from surveyer.models import Record, SearchResult
 from surveyer.sources.base import HttpClient, coerce_int
 
 API = "https://api.semanticscholar.org/graph/v1/paper/search"
+PAPER_API = "https://api.semanticscholar.org/graph/v1/paper"
 FIELDS = "title,abstract,year,citationCount,externalIds,venue,url,authors"
 
 # The search endpoint caps `limit` at 100 records per request.
 PAGE_SIZE = 100
 
 
+def parse_s2_paper(p: dict) -> Record:
+    """Parse a single Semantic Scholar paper object into a Record."""
+    ext = p.get("externalIds") or {}
+    authors = [a.get("name") for a in p.get("authors", []) if a.get("name")]
+    return Record(
+        title=p.get("title") or "",
+        doi=ext.get("DOI"),
+        authors=authors,
+        year=p.get("year"),
+        venue=p.get("venue"),
+        abstract=p.get("abstract"),
+        n_citations=p.get("citationCount"),
+        url=p.get("url"),
+    )
+
+
 def parse_s2(raw: dict) -> list[Record]:
-    """Parse a Semantic Scholar API response into a list of Records."""
-    out: list[Record] = []
-    for p in raw.get("data", []):
-        ext = p.get("externalIds") or {}
-        authors = [a.get("name") for a in p.get("authors", []) if a.get("name")]
-        out.append(
-            Record(
-                title=p.get("title") or "",
-                doi=ext.get("DOI"),
-                authors=authors,
-                year=p.get("year"),
-                venue=p.get("venue"),
-                abstract=p.get("abstract"),
-                n_citations=p.get("citationCount"),
-                url=p.get("url"),
-            )
-        )
-    return out
+    """Parse a Semantic Scholar search response into a list of Records."""
+    return [parse_s2_paper(p) for p in raw.get("data", [])]
 
 
 class SemanticScholarSource:

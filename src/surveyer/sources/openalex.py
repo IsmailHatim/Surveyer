@@ -32,29 +32,29 @@ def _strip_doi(doi: str | None) -> str | None:
     return re.sub(r"^https?://(dx\.)?doi\.org/", "", doi, flags=re.IGNORECASE)
 
 
+def parse_openalex_work(w: dict) -> Record:
+    """Parse a single OpenAlex work dict into a Record."""
+    loc = (w.get("primary_location") or {}).get("source") or {}
+    authors = [
+        a.get("author", {}).get("display_name")
+        for a in w.get("authorships", [])
+        if a.get("author", {}).get("display_name")
+    ]
+    return Record(
+        title=w.get("title") or "",
+        doi=_strip_doi(w.get("doi")),
+        authors=authors,
+        year=w.get("publication_year"),
+        venue=loc.get("display_name"),
+        abstract=reconstruct_abstract(w.get("abstract_inverted_index")),
+        n_citations=w.get("cited_by_count"),
+        url=w.get("doi"),
+    )
+
+
 def parse_openalex(raw: dict) -> list[Record]:
     """Parse an OpenAlex API response into a list of Records."""
-    out: list[Record] = []
-    for w in raw.get("results", []):
-        loc = (w.get("primary_location") or {}).get("source") or {}
-        authors = [
-            a.get("author", {}).get("display_name")
-            for a in w.get("authorships", [])
-            if a.get("author", {}).get("display_name")
-        ]
-        out.append(
-            Record(
-                title=w.get("title") or "",
-                doi=_strip_doi(w.get("doi")),
-                authors=authors,
-                year=w.get("publication_year"),
-                venue=loc.get("display_name"),
-                abstract=reconstruct_abstract(w.get("abstract_inverted_index")),
-                n_citations=w.get("cited_by_count"),
-                url=w.get("doi"),
-            )
-        )
-    return out
+    return [parse_openalex_work(w) for w in raw.get("results", [])]
 
 
 class OpenAlexSource:
