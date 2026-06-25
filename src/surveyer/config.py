@@ -144,6 +144,12 @@ class SnowballConfig(msgspec.Struct, kw_only=True):
     max_results_per_seed: int = 200  # cap per seed per direction
 
 
+class SeedConfig(msgspec.Struct, kw_only=True):
+    """Must-cite injection: ids pinned into the corpus and used as snowball seeds."""
+
+    ids: list[str] = []
+
+
 class ExtendConfig(msgspec.Struct, kw_only=True):
     """Extend-mode configuration: build on a manually screened workbook."""
 
@@ -159,6 +165,7 @@ class SurveyConfig(msgspec.Struct, kw_only=True):
     filter: FilterConfig = msgspec.field(default_factory=FilterConfig)
     extend: ExtendConfig | None = None
     snowball: SnowballConfig | None = None
+    seed: SeedConfig | None = None
 
 
 def disable_filters(cfg: SurveyConfig) -> None:
@@ -271,6 +278,10 @@ def load_config(path: str | Path) -> SurveyConfig:
                 "snowball.max_results_per_seed must be a positive integer, "
                 f"got {cfg.snowball.max_results_per_seed}"
             )
+    if cfg.seed is not None:
+        for raw_id in cfg.seed.ids:
+            if not raw_id.strip():
+                raise ValueError("seed.ids must not contain blank entries")
     if not 0.0 <= cfg.filter.llm.threshold <= 1.0:
         raise ValueError(
             "filter.llm.threshold must be between 0 and 1, "
