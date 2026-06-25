@@ -125,6 +125,7 @@ class FilterConfig(msgspec.Struct, kw_only=True):
 
     concepts: dict[str, list[str]] | None = None
     concept_mode: str = "any"  # "any" | "all" | "min:N"
+    keyword_gate: str = "soft"  # "soft" | "hard"
     keyword: KeywordConfig = msgspec.field(default_factory=KeywordConfig)
     llm: LLMConfig = msgspec.field(default_factory=LLMConfig)
 
@@ -231,6 +232,11 @@ def load_config(path: str | Path) -> SurveyConfig:
                 f"filter.concept_mode {mode!r}: N must be between 1 and "
                 f"{n_concepts} (number of filter.concepts)"
             )
+    if cfg.filter.keyword_gate not in ("soft", "hard"):
+        raise ValueError(
+            f'filter.keyword_gate must be "soft" or "hard"; '
+            f"got {cfg.filter.keyword_gate!r}"
+        )
     if cfg.filter.concepts and cfg.filter.keyword.include:
         log.warning(
             "filter.include_ignored",
