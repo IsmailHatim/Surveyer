@@ -1479,7 +1479,7 @@ wheels = [
 
 [[package]]
 name = "surveyer"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "graphviz", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },

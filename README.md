@@ -19,10 +19,10 @@
   <p><em>The built-in terminal dashboard: pick a config, tweak it, run the pipeline live.</em></p>
 </div>
 
-Surveyer is an open source Literature search tool for academic surveys: fetch from
+Surveyer is an open-source literature-search tool for academic surveys: fetch from
 multiple sources, deduplicate, filter (keyword and LLM relevance), export to Excel
 with ready-to-use BibTeX citations, and generate a PRISMA flow diagram.
-It's reproducible and based on configuration files, so you can easily update your 
+It's reproducible and based on configuration files, so you can easily update your
 survey as new papers come out or share it with collaborators.
 
 ## Install
@@ -67,7 +67,7 @@ sources and BibTeX.
 ### Command line
 
 ```bash
-# Full run will create : runs/<name>/survey.xlsx, references.bib, ledger.json, prisma.{svg,pdf,png,mmd}
+# Full run creates: runs/<name>/survey.xlsx, references.bib, ledger.json, prisma.{svg,pdf,png,mmd}
 uv run surveyer run --config examples/survey.toml
 
 # Fetch and deduplicate only (skips BibTeX resolution)
@@ -96,7 +96,7 @@ Set credentials in your environment:
 ```bash
 export OPENAI_API_KEY=sk-...
 export SEMANTIC_SCHOLAR_API_KEY=...   # strongly recommended
-export NCBI_API_KEY=...               # strongly recommended for PubMed's papers
+export NCBI_API_KEY=...               # optional
 ```
 
 Or keep them in the `.env` file and load it automatically:
@@ -167,13 +167,30 @@ xlsx = "runs/v1/survey.xlsx"   # the manually screened workbook
 output_dir = "runs/v2"         # must differ from the v1
 ```
 
-Your manual decisions are final: `papers` rows are  kept) and `excluded` rows 
-stay excluded, and re-found records are dropped as `already_screened`. 
+Your manual decisions are final: `papers` rows stay included, `excluded` rows
+stay excluded, and re-found records are dropped as `already_screened`.
 Filters apply only to newly discovered papers.
 
-The output `survey.xlsx` is a **copy** of your screened file with new rows appended, missing 
+The output `survey.xlsx` is a **copy** of your screened file with new rows appended, missing
 BibTeX is backfilled, and the PRISMA diagram switches to the 2020 review-update layout
-(previous-version box and cumulative total). Requires `export_format = "xlsx"` (updates can be iterated)
+(previous-version box and cumulative total). Requires `export_format = "xlsx"`.
+
+## Must-cite seeds
+
+Some papers are must cite: the foundational works your survey *has* to cite,
+even if a keyword rule or the LLM judge would otherwise filter them out. List their
+DOIs or Semantic Scholar ids under `[seed]` and Surveyer resolves and **pins** them
+into the corpus, bypassing the keyword and LLM filters:
+
+```toml
+[seed]
+ids = ["10.1145/3394486.3403182", "arXiv:2409.07825", "CorpusID:268417919"]
+```
+
+A seed that your search also turns up is counted once, and seeds feed
+the snowball arm if enabled so the tool chases citations around them too. The PRISMA diagram
+shows a parallel *must-cite* arm that joins the shared total; unresolved ids warn
+without failing the run.
 
 ## Snowball (citation chasing)
 
@@ -225,8 +242,8 @@ For every source and query, Surveyer records how many results it **requested**,
 how many it actually **retrieved**, and the database's own **reported total** when
 the API exposes one. This lands in the `retrieval` sheet (and `retrieval.csv`), so
 you can tell when a source was capped below its full match count and may have
-missed papers bump `max_results_per_query` for those sources. The dashboard also
-warns when a search looks truncated.
+missed papers — then bump `max_results_per_query` for those sources. The dashboard
+also warns when a search looks truncated.
 
 ### BibTeX citations
 

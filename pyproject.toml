@@ -1,6 +1,6 @@
 [project]
 name = "surveyer"
-version = "0.1.0"
+version = "1.0.0"
 description = "Standard tool for survey research."
 requires-python = ">= 3.11"
 readme = "README.md"
