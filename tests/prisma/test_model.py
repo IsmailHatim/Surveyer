@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from surveyer.config import Query, SearchConfig
-from surveyer.models import Ledger, QueryRetrieval, SourceCount
+from surveyer.models import (
+    Ledger,
+    QueryRetrieval,
+    SeedLedger,
+    SnowballLedger,
+    SourceCount,
+)
 from surveyer.prisma.model import _build_completeness, build_model
 
 
@@ -131,6 +137,57 @@ def test_build_model_without_extend_is_unchanged():
     assert rows["included"].title == "Studies included"
     assert rows["dedup"].exclusion.label == "Duplicates removed"
     assert model.previous_included is None
+
+
+def _seed_ledger() -> Ledger:
+    # Main arm 70, snowball 30, seeds pinned 3 -> total 103.
+    return Ledger(
+        identified=[SourceCount(source="openalex", count=200)],
+        duplicates_removed=40,
+        excluded_keyword=60,
+        excluded_llm=30,
+        included=70,
+        snowball=SnowballLedger(
+            seeds=73, identified=100, duplicates_removed=20, included=30
+        ),
+        seed=SeedLedger(imported=3, resolved=3, unresolved=0, pinned=3),
+    )
+
+
+def test_build_model_seed_arm_present():
+    m = build_model(_seed_ledger(), _search(), llm_model="gpt-4o-mini")
+    assert m.seed_rows, "seeds should produce a drawn arm"
+    last = m.seed_rows[-1]
+    assert last.swimlane == "included"
+    assert last.count == 3  # pinned seeds
+    # identification box shows the imported ids
+    assert m.seed_rows[0].count == 3
+
+
+def test_build_model_seed_arm_reconciles_with_total():
+    m = build_model(_seed_ledger(), _search(), llm_model="gpt-4o-mini")
+    rows = {r.id: r for r in m.rows}
+    main = rows["included"].count
+    snow = m.snowball_rows[-1].count
+    seed = m.seed_rows[-1].count
+    # The drawn included-arm boxes must sum to the total box (no silent gap).
+    assert main + snow + seed == rows["total"].count == 103
+
+
+def test_build_model_seed_arm_drops_unresolved():
+    led = _seed_ledger()
+    led.seed = SeedLedger(imported=5, resolved=3, unresolved=2, pinned=3)
+    m = build_model(led, _search(), llm_model="gpt-4o-mini")
+    head = m.seed_rows[0]
+    assert head.count == 5  # imported
+    assert head.exclusion is not None
+    assert head.exclusion.count == 2  # 5 imported - 3 pinned
+    assert m.seed_rows[-1].count == 3
+
+
+def test_build_model_no_seed_arm_without_seed():
+    m = build_model(_ledger(), _search())
+    assert m.seed_rows == []
 
 
 def _completeness_ledger() -> Ledger:

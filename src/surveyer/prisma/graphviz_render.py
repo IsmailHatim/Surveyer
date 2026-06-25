@@ -169,6 +169,36 @@ def _build(model: PrismaModel, rail_width: float) -> graphviz.Digraph:
             s.node("snow_identified")
         dot.edge(model.snowball_rows[-1].id, "total")
 
+    seed_prev: str | None = None
+    for row in model.seed_rows:
+        fill = _FILL_BLUE if row.swimlane == "screening" else _FILL_GREEN
+        dot.node(
+            row.id,
+            _text(row.title, row.count),
+            fillcolor=fill,
+            style="rounded,filled",
+            group="seedspine",
+        )
+        if row.exclusion is not None:
+            eid = f"{row.id}_excl"
+            dot.node(eid, _exclusion_text(row.exclusion), fillcolor=_FILL_RED)
+            with dot.subgraph() as s:
+                s.attr(rank="same")
+                s.node(row.id)
+                s.node(eid)
+            dot.edge(row.id, eid)
+        if seed_prev is not None:
+            dot.edge(seed_prev, row.id)
+        seed_prev = row.id
+    if model.seed_rows:
+        # Align the must-cite arm with the other identification boxes, then
+        # converge on the shared total box.
+        with dot.subgraph() as s:
+            s.attr(rank="same")
+            s.node("identified")
+            s.node("seed_identified")
+        dot.edge(model.seed_rows[-1].id, "total")
+
     if model.previous_included is not None:
         dot.node(
             "previous",

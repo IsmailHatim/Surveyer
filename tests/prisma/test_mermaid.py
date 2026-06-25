@@ -129,6 +129,30 @@ def test_mermaid_renders_snowball_arm():
     assert "snow_included --> total" in text
 
 
+def _seed_model():
+    from surveyer.models import SeedLedger
+
+    led = Ledger(
+        identified=[SourceCount(source="openalex", count=10)],
+        duplicates_removed=2,
+        excluded_keyword=1,
+        excluded_llm=1,
+        included=3,
+        seed=SeedLedger(imported=2, resolved=2, unresolved=0, pinned=2),
+    )
+    return build_model(
+        led, SearchConfig(sources=["openalex"], queries=[]), llm_model="gpt-4o-mini"
+    )
+
+
+def test_mermaid_renders_seed_arm():
+    text = to_mermaid(_seed_model())
+    assert "Records identified via must-cite list" in text
+    assert "seed_included --> total" in text
+    # main arm + seed arm both converge on the shared total box
+    assert "included --> total" in text
+
+
 def test_esc_escapes_special_chars():
     from surveyer.prisma.mermaid_render import _esc
 

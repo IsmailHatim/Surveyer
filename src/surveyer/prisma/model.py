@@ -57,6 +57,7 @@ class PrismaModel(msgspec.Struct, kw_only=True):
     previous_included: int | None = None
     source_completeness: list[SourceCompleteness] = []
     snowball_rows: list[Row] = []
+    seed_rows: list[Row] = []
 
 
 def _build_query_panel(search: SearchConfig) -> str | None:
@@ -165,6 +166,39 @@ def _build_snowball_rows(snow, *, llm_model: str | None) -> list[Row]:
     return rows
 
 
+def _build_seed_rows(seed) -> list[Row]:
+    """Build the must-cite arm: ids identified -> studies pinned into the corpus."""
+    dropped = seed.imported - seed.pinned
+    exclusion: ExclusionBox | None = None
+    if dropped > 0:
+        breakdown = [
+            (label, n)
+            for label, n in (
+                ("unresolved ids", seed.unresolved),
+                ("already in corpus", seed.resolved - seed.pinned),
+            )
+            if n > 0
+        ]
+        exclusion = ExclusionBox(
+            label="Excluded must-cite ids", count=dropped, breakdown=breakdown
+        )
+    return [
+        Row(
+            id="seed_identified",
+            swimlane="identification",
+            title="Records identified via must-cite list",
+            count=seed.imported,
+            exclusion=exclusion,
+        ),
+        Row(
+            id="seed_included",
+            swimlane="included",
+            title="Studies included via must-cite seeds",
+            count=seed.pinned,
+        ),
+    ]
+
+
 def build_model(
     ledger: Ledger,
     search: SearchConfig,
@@ -243,11 +277,15 @@ def build_model(
     if ledger.snowball is not None:
         snowball_rows = _build_snowball_rows(ledger.snowball, llm_model=llm_model)
 
-    if ledger.previously_included or ledger.snowball is not None:
+    seed_rows: list[Row] = []
+    if ledger.seed is not None and ledger.seed.pinned:
+        seed_rows = _build_seed_rows(ledger.seed)
+
+    if ledger.previously_included or ledger.snowball is not None or seed_rows:
         main_label = (
-            "Studies included from databases"
-            if ledger.snowball is not None
-            else "New studies included"
+            "New studies included"
+            if ledger.previously_included and ledger.snowball is None and not seed_rows
+            else "Studies included from databases"
         )
         rows.append(
             Row(
@@ -289,4 +327,5 @@ def build_model(
             _build_completeness(ledger) if SHOW_COMPLETENESS_TABLE else []
         ),
         snowball_rows=snowball_rows,
+        seed_rows=seed_rows,
     )
