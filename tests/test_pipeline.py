@@ -29,8 +29,12 @@ class FakeSource:
     def search(self, terms, *, max_results):
         return SearchResult(
             records=[
-                Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
-                Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
+                Record(
+                    title="Relevant security paper", abstract="relevant", doi="10.1/a"
+                ),
+                Record(
+                    title="Relevant security paper", abstract="relevant", doi="10.1/a"
+                ),
                 Record(title="Off topic cooking", abstract="recipes", doi="10.1/b"),
             ]
         )
@@ -38,7 +42,11 @@ class FakeSource:
 
 class FakeScorer:
     def score(self, survey_abstract, record, *, concepts=None):
-        return (0.9, "ok", {}) if "relevant" in (record.abstract or "") else (0.1, "no", {})
+        return (
+            (0.9, "ok", {})
+            if "relevant" in (record.abstract or "")
+            else (0.1, "no", {})
+        )
 
 
 def _cfg(tmp_path) -> SurveyConfig:
@@ -208,10 +216,14 @@ def test_extend_pipeline_never_rescores_baseline(tmp_path):
             return SearchResult(
                 records=[
                     Record(
-                        title="Fresh security paper", abstract="relevant", doi="10.1/new"
+                        title="Fresh security paper",
+                        abstract="relevant",
+                        doi="10.1/new",
                     ),
                     # Same DOI as the baseline's kept paper: already screened.
-                    Record(title="Old security paper", abstract="relevant", doi="10.1/old"),
+                    Record(
+                        title="Old security paper", abstract="relevant", doi="10.1/old"
+                    ),
                 ]
             )
 
@@ -381,7 +393,11 @@ class _ZeroConceptSource:
 
     def search(self, terms, *, max_results):
         return SearchResult(
-            records=[Record(title="implies missingness without the words", abstract="relevant")]
+            records=[
+                Record(
+                    title="implies missingness without the words", abstract="relevant"
+                )
+            ]
         )
 
 

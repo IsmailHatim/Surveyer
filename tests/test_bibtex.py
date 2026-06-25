@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import httpx
 
-from surveyer.bibtex import BibtexResolver, build_local_entry
+from surveyer.bibtex import (
+    BibtexResolver,
+    build_local_entry,
+    extract_bibtex_keys,
+)
 from surveyer.models import Record
 from surveyer.sources.base import HttpClient
 
@@ -188,3 +192,26 @@ def test_build_local_entry_escapes_special_chars():
     assert r"\$X" in title_line
     assert "{great}" not in title_line  # stray braces stripped
     assert title_line.count("{") == 1 and title_line.count("}") == 1
+
+
+def test_extract_bibtex_keys_parses_entry_keys():
+    records = [
+        Record(title="A", bibtex="@misc{doe2024great,\n  title = {A}\n}"),
+        Record(title="B", bibtex="@article{ DBLP:conf/x,\n}"),
+        Record(title="C"),  # no bibtex -> contributes nothing
+    ]
+    assert extract_bibtex_keys(records) == {"doe2024great", "DBLP:conf/x"}
+
+
+def test_resolve_all_seeds_seen_from_baseline_keys(tmp_path):
+    # A baseline entry already uses the key a fresh record would synthesize; the
+    # fresh local key must be suffixed instead of colliding.
+    baseline = Record(
+        title="Great", authors=["Jane Doe"], year=2024, bibtex="@misc{doe2024great,\n}"
+    )
+    fresh = Record(title="Great", authors=["Jane Doe"], year=2024)  # -> local
+    resolver = _resolver(tmp_path)
+    resolver.resolve_all([fresh], seed_keys=extract_bibtex_keys([baseline]))
+    assert fresh.bibtex_source == "local"
+    assert "@misc{doe2024greata," in fresh.bibtex
+    assert "@misc{doe2024great," not in fresh.bibtex

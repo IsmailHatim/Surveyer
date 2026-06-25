@@ -192,8 +192,9 @@ def test_apply_llm_filter_cancel_before_any_record():
     event = threading.Event()
     event.set()
     with pytest.raises(PipelineCancelled):
-        apply_llm_filter([Record(title="x", abstract="relevant")], cfg, scorer,
-                          cancel=event)
+        apply_llm_filter(
+            [Record(title="x", abstract="relevant")], cfg, scorer, cancel=event
+        )
     assert scorer.calls == 0
 
 
@@ -291,7 +292,9 @@ def test_parse_response_folds_concept_verdicts_into_reason():
 def test_parse_response_without_concepts_keeps_plain_reason():
     from surveyer.filtering.llm import _parse_response
 
-    score, reason, verdicts = _parse_response({"concepts": {}, "score": 0.9, "reason": "on topic"})
+    score, reason, verdicts = _parse_response(
+        {"concepts": {}, "score": 0.9, "reason": "on topic"}
+    )
     assert score == 0.9
     assert reason == "on topic"
     assert verdicts == {}
@@ -325,7 +328,10 @@ def test_ollama_scorer_sends_system_message_and_concepts(mocker):
     assert verdicts == {"graphs": "yes"}
     messages = fake_client.chat.call_args.kwargs["messages"]
     assert messages[0]["role"] == "system"
-    assert "anchored scale" in messages[0]["content"].lower() or "1.0" in messages[0]["content"]
+    assert (
+        "anchored scale" in messages[0]["content"].lower()
+        or "1.0" in messages[0]["content"]
+    )
     assert "graphs: graph" in messages[1]["content"]
 
 
@@ -388,13 +394,11 @@ class TieredScorer:
 
 def test_borderline_band_routing():
     """Records in [threshold - margin, threshold) land in kept but counted borderline."""
-    cfg = LLMConfig(
-        enabled=True, threshold=0.5, review_margin=0.1, survey_abstract="s"
-    )
+    cfg = LLMConfig(enabled=True, threshold=0.5, review_margin=0.1, survey_abstract="s")
     recs = [
-        Record(title="hi", abstract="0.8"),   # include
-        Record(title="mid", abstract="0.45"), # borderline [0.4, 0.5)
-        Record(title="lo", abstract="0.2"),   # exclude
+        Record(title="hi", abstract="0.8"),  # include
+        Record(title="mid", abstract="0.45"),  # borderline [0.4, 0.5)
+        Record(title="lo", abstract="0.2"),  # exclude
     ]
     kept, excluded, borderline = apply_llm_filter(
         recs, cfg, TieredScorer(), concepts={"c": ["c"]}
@@ -420,9 +424,7 @@ def test_margin_zero_is_legacy_behavior():
 
 def test_score_exactly_at_threshold_is_include():
     """Score exactly at threshold is included, borderline count is 0."""
-    cfg = LLMConfig(
-        enabled=True, threshold=0.5, review_margin=0.1, survey_abstract="s"
-    )
+    cfg = LLMConfig(enabled=True, threshold=0.5, review_margin=0.1, survey_abstract="s")
     recs = [Record(title="edge", abstract="0.5")]
     kept, excluded, borderline = apply_llm_filter(recs, cfg, TieredScorer())
     assert recs[0].screening_status == "include"
@@ -431,9 +433,7 @@ def test_score_exactly_at_threshold_is_include():
 
 def test_score_exactly_at_lo_is_borderline():
     """Score exactly at lo (threshold - review_margin) is borderline."""
-    cfg = LLMConfig(
-        enabled=True, threshold=0.5, review_margin=0.1, survey_abstract="s"
-    )
+    cfg = LLMConfig(enabled=True, threshold=0.5, review_margin=0.1, survey_abstract="s")
     recs = [Record(title="edge", abstract="0.4")]  # lo = 0.5 - 0.1 = 0.4
     kept, excluded, borderline = apply_llm_filter(recs, cfg, TieredScorer())
     assert recs[0].screening_status == "borderline"

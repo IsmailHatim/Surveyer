@@ -118,7 +118,9 @@ def test_parse_dblp_tolerates_malformed_authors():
                     {
                         "info": {
                             "title": "A paper",
-                            "authors": {"author": [{"text": "Ada"}, {"@pid": "x"}, "Bob"]},
+                            "authors": {
+                                "author": [{"text": "Ada"}, {"@pid": "x"}, "Bob"]
+                            },
                         }
                     }
                 ]

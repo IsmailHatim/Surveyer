@@ -74,7 +74,9 @@ def test_year_min_after_year_max_rejected(tmp_path):
 
 @pytest.mark.parametrize("bad", [0, -5])
 def test_non_positive_max_results_rejected(tmp_path, bad):
-    cfg = SAMPLE.replace("max_results_per_query = 100", f"max_results_per_query = {bad}")
+    cfg = SAMPLE.replace(
+        "max_results_per_query = 100", f"max_results_per_query = {bad}"
+    )
     p = tmp_path / "survey.toml"
     p.write_text(cfg)
     with pytest.raises(ValueError, match="max_results_per_query"):
@@ -503,8 +505,7 @@ def test_snowball_config_defaults_absent(tmp_path):
 
     p = tmp_path / "s.toml"
     p.write_text(
-        '[project]\nname = "t"\n'
-        '[search]\nsources = ["openalex"]\nqueries = []\n'
+        '[project]\nname = "t"\n[search]\nsources = ["openalex"]\nqueries = []\n'
     )
     cfg = load_config(p)
     assert cfg.snowball is None
@@ -594,10 +595,7 @@ def test_bad_concept_mode_rejected(tmp_path):
 def test_min_n_out_of_range_rejected(tmp_path):
     from surveyer.config import load_config
 
-    body = (
-        '[filter]\nconcept_mode = "min:4"\n'
-        "[filter.concepts]\na = [\"x\"]\nb = [\"y\"]\n"
-    )
+    body = '[filter]\nconcept_mode = "min:4"\n[filter.concepts]\na = ["x"]\nb = ["y"]\n'
     with pytest.raises(ValueError, match="concept_mode"):
         load_config(_write(tmp_path, body))
 
@@ -620,7 +618,7 @@ def test_threshold_range_validated(tmp_path):
 def test_review_margin_range_validated(tmp_path):
     from surveyer.config import load_config
 
-    body = '[filter.llm]\nreview_margin = 2.0\n'
+    body = "[filter.llm]\nreview_margin = 2.0\n"
     with pytest.raises(ValueError, match="review_margin"):
         load_config(_write(tmp_path, body))
 

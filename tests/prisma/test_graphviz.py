@@ -106,8 +106,9 @@ def _snowball_model():
             included=2,
         ),
     )
-    return build_model(led, SearchConfig(sources=["openalex"], queries=[]),
-                       llm_model="gpt-4o-mini")
+    return build_model(
+        led, SearchConfig(sources=["openalex"], queries=[]), llm_model="gpt-4o-mini"
+    )
 
 
 def test_graphviz_builds_snowball_arm():

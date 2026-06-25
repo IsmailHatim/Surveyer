@@ -117,7 +117,9 @@ def test_extend_section_added_and_removed():
 
 def test_clearing_extend_xlsx_preserves_sibling_keys():
     # Clearing the xlsx should drop only that key, not a sibling under [extend].
-    doc = tomlkit.parse(SAMPLE + '\n[extend]\nxlsx = "runs/v1/survey.xlsx"\nnote = "keep me"\n')
+    doc = tomlkit.parse(
+        SAMPLE + '\n[extend]\nxlsx = "runs/v1/survey.xlsx"\nnote = "keep me"\n'
+    )
     v = extract_form(doc)
     v.extend_xlsx = ""
     apply_form(doc, v)
@@ -315,6 +317,27 @@ def test_apply_edits_concepts_and_preserves_comments():
     assert extract_form(doc).search_concepts == values.search_concepts
 
 
+def test_concept_reordering_is_persisted():
+    doc = tomlkit.parse(SAMPLE)
+    values = extract_form(doc)
+    values.search_concepts = [
+        ConceptItem(name="federated", synonyms=["federated learning"]),
+        ConceptItem(name="privacy", synonyms=["differential privacy"]),
+    ]
+    apply_form(doc, values)
+    # Reverse the order and re-apply.
+    values2 = extract_form(doc)
+    values2.search_concepts = list(reversed(values2.search_concepts))
+    apply_form(doc, values2)
+    assert [c.name for c in extract_form(doc).search_concepts] == [
+        "privacy",
+        "federated",
+    ]
+    # Raw TOML order under [search.concepts] reflects the new order too.
+    seg = tomlkit.dumps(doc).split("[search.concepts]")[1].split("\n[")[0]
+    assert seg.index("privacy") < seg.index("federated")
+
+
 def test_apply_removes_emptied_concepts_table():
     doc = tomlkit.parse(SAMPLE)
     values = extract_form(doc)
@@ -373,7 +396,7 @@ def test_concept_mode_and_review_margin_round_trip(tmp_path):
         '[project]\nname = "t"\n[search]\nsources = ["openalex"]\n'
         'queries = [{label="a", terms="x"}]\n'
         '[filter]\nconcept_mode = "all"\n'
-        '[filter.llm]\nreview_margin = 0.1\n'
+        "[filter.llm]\nreview_margin = 0.1\n"
     )
     doc = load_document(p)
     form = extract_form(doc)

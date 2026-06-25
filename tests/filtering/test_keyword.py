@@ -113,7 +113,11 @@ def test_no_concepts_uses_include_path():
 
 
 def test_any_mode_keeps_single_concept_match():
-    concepts = {"graph": ["graph"], "multimodal": ["multimodal"], "missing": ["missing"]}
+    concepts = {
+        "graph": ["graph"],
+        "multimodal": ["multimodal"],
+        "missing": ["missing"],
+    }
     recs = [Record(title="a graph paper"), Record(title="unrelated work")]
     kept, excluded, reasons = apply_keyword_filter(
         recs, KeywordConfig(), concepts=concepts, concept_mode="any"

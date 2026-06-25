@@ -6,7 +6,9 @@ from surveyer.sources.base import HttpClient, dequote_terms
 
 
 def test_dequote_terms_strips_quotes_and_collapses_whitespace():
-    assert dequote_terms('"graph neural network" survey') == "graph neural network survey"
+    assert (
+        dequote_terms('"graph neural network" survey') == "graph neural network survey"
+    )
 
 
 def test_dequote_terms_noop_on_unquoted():
