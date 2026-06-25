@@ -23,6 +23,20 @@ _BIBTEX_ACCEPT = {"Accept": "application/x-bibtex"}
 _MIN_INTERVAL = 1.5
 
 
+_ENTRY_KEY_RE = re.compile(r"@\w+\s*\{\s*([^,\s}]+)")
+
+
+def extract_bibtex_keys(records: list[Record]) -> set[str]:
+    """Collect the citation keys already present in records' resolved bibtex."""
+    keys: set[str] = set()
+    for r in records:
+        if r.bibtex:
+            m = _ENTRY_KEY_RE.search(r.bibtex)
+            if m:
+                keys.add(m.group(1))
+    return keys
+
+
 def _citation_key(record: Record, seen: set[str]) -> str:
     """A unique-within-run key like ``doe2024great``."""
     surname = record.authors[0].split()[-1] if record.authors else ""
@@ -121,9 +135,11 @@ class BibtexResolver:
                 return text, "doi"
         return build_local_entry(record, seen=self._seen), "local"
 
-    def resolve_all(self, records: list[Record]) -> None:
+    def resolve_all(
+        self, records: list[Record], *, seed_keys: set[str] | None = None
+    ) -> None:
         """Resolve and set bibtex/bibtex_source on each record."""
-        self._seen = set()
+        self._seen = set(seed_keys or ())
         n_local = 0
         total = len(records)
         for i, r in enumerate(records, start=1):
