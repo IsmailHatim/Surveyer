@@ -167,6 +167,7 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
         search=SearchConfig(sources=["openalex"], queries=[]),
         filter=FilterConfig(
             keyword=KeywordConfig(include=["graph"], exclude=[]),
+            keyword_gate="hard",  # explicit hard gate: keyword filter drops before LLM
             llm=LLMConfig(enabled=True, threshold=0.5, survey_abstract="s"),
         ),
         snowball=SnowballConfig(enabled=True, direction="backward"),
@@ -190,6 +191,54 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
     assert led.excluded_keyword == 1  # "Cooking pasta recipes"
     assert led.included == 1
     assert any(r.exclusion_reason for r in excluded)
+
+
+def test_snowball_soft_gate_keeps_near_miss(tmp_path):
+    """Soft gate: candidate lacking concept words is kept (not keyword-dropped) when LLM is enabled."""
+    from surveyer.config import (
+        FilterConfig,
+        KeywordConfig,
+        LLMConfig,
+        ProjectConfig,
+        SearchConfig,
+        SnowballConfig,
+        SurveyConfig,
+    )
+    from surveyer.snowball import SnowballFetch, snowball_stage
+
+    # A candidate with no concept words — hard gate would drop it, soft gate keeps it.
+    near_miss = Record(title="cited paper without concept words", doi="10.1/c", abstract="something")
+
+    class FakeSnowball:
+        def fetch(self, seeds, sb_cfg, *, cancel=None):
+            return SnowballFetch(
+                candidates=[near_miss],
+                seeds_total=len(seeds),
+                seeds_resolved=len(seeds),
+                backward=1,
+                forward=0,
+                retrieval=[],
+            )
+
+    class FakeScorer:
+        def score(self, survey_abstract, record, *, concepts=None):
+            return (0.9, "ok", {})
+
+    cfg = SurveyConfig(
+        project=ProjectConfig(name="t", output_dir=str(tmp_path)),
+        search=SearchConfig(sources=["openalex"], queries=[]),
+        filter=FilterConfig(
+            keyword=KeywordConfig(include=["graph"], exclude=[]),
+            llm=LLMConfig(enabled=True, threshold=0.5, survey_abstract="s"),
+        ),
+        snowball=SnowballConfig(enabled=True, direction="backward"),
+    )
+    cfg.filter.keyword_gate = "soft"
+
+    seeds = [Record(title="seed", doi="10.1/seed")]
+    kept, excluded, ledger = snowball_stage(seeds, [], cfg, FakeScorer(), FakeSnowball())
+    assert any(r.doi == "10.1/c" for r in kept)
+    assert ledger.excluded_keyword == 0
 
 
 def test_run_snowball_appends_to_workbook(tmp_path):

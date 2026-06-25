@@ -445,3 +445,11 @@ def test_summary_frame_includes_borderline_row():
     frame = _summary_frame(Ledger(included=5, borderline=2))
     rows = dict(zip(frame["stage"].to_list(), frame["count"].to_list()))
     assert rows["borderline"] == 2
+
+
+def test_keyword_note_in_export_row():
+    from surveyer.export import _record_row
+
+    r = Record(title="x", keyword_note="matched 2/3 concepts lexically")
+    row = _record_row(r)
+    assert row["keyword_note"] == "matched 2/3 concepts lexically"

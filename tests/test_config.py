@@ -623,3 +623,20 @@ def test_review_margin_range_validated(tmp_path):
     body = '[filter.llm]\nreview_margin = 2.0\n'
     with pytest.raises(ValueError, match="review_margin"):
         load_config(_write(tmp_path, body))
+
+
+# --- Task 1: keyword_gate field + validation ---
+
+
+def test_keyword_gate_defaults_to_soft(tmp_path):
+    from surveyer.config import load_config
+
+    cfg = load_config(_write(tmp_path, ""))
+    assert cfg.filter.keyword_gate == "soft"
+
+
+def test_keyword_gate_rejects_unknown(tmp_path):
+    from surveyer.config import load_config
+
+    with pytest.raises(ValueError, match="keyword_gate"):
+        load_config(_write(tmp_path, '[filter]\nkeyword_gate = "bogus"\n'))

@@ -105,3 +105,7 @@ def test_record_has_screening_fields():
 
 def test_ledger_has_borderline_count():
     assert Ledger().borderline == 0
+
+
+def test_record_keyword_note_defaults_none():
+    assert Record(title="x").keyword_note is None

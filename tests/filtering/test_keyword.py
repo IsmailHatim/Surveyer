@@ -149,3 +149,76 @@ def test_exclude_still_wins_over_concept_match():
     )
     assert excluded == 1
     assert recs[0].exclusion_reason == "contains 'survey'"
+
+
+def test_soft_gate_keeps_concept_near_miss():
+    concepts = {
+        "graph": ["graph neural network", "gnn"],
+        "multimodal": ["multimodal", "multi-modal"],
+        "missing": ["missing", "incomplete", "imputation"],
+    }
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="A multimodal graph neural network study", abstract="")
+    kept, excluded, reasons = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all", gate="soft"
+    )
+    assert [r.title for r in kept] == [rec.title]
+    assert excluded == 0
+    assert reasons == {}
+    assert kept[0].keyword_note == "matched 2/3 concepts lexically"
+
+
+def test_soft_gate_keeps_zero_concept_record():
+    concepts = {"graph": ["gnn"], "multimodal": ["multimodal"]}
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="Unrelated cooking recipes", abstract="")
+    kept, excluded, reasons = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all", gate="soft"
+    )
+    assert len(kept) == 1
+    assert excluded == 0
+    assert kept[0].keyword_note == "matched 0/2 concepts lexically"
+
+
+def test_soft_gate_exclude_still_drops():
+    concepts = {"graph": ["gnn"]}
+    cfg = KeywordConfig(include=[], exclude=["survey"])
+    rec = Record(title="A gnn survey", abstract="")
+    kept, excluded, reasons = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all", gate="soft"
+    )
+    assert kept == []
+    assert excluded == 1
+    assert reasons == {"contains 'survey'": 1}
+
+
+def test_soft_gate_full_match_no_note():
+    concepts = {"graph": ["gnn"], "multimodal": ["multimodal"]}
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="multimodal gnn", abstract="")
+    kept, _, _ = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all", gate="soft"
+    )
+    assert kept[0].keyword_note is None
+
+
+def test_soft_gate_include_advisory():
+    cfg = KeywordConfig(include=["security"], exclude=[])
+    rec = Record(title="Unrelated topic", abstract="cooking")
+    kept, excluded, reasons = apply_keyword_filter([rec], cfg, gate="soft")
+    assert len(kept) == 1
+    assert excluded == 0
+    assert kept[0].keyword_note == "no included keyword (advisory)"
+
+
+def test_hard_gate_unchanged_default():
+    # Default gate is hard: existing drop behavior preserved.
+    concepts = {"graph": ["gnn"], "multimodal": ["multimodal"]}
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="only gnn here", abstract="")
+    kept, excluded, reasons = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all"
+    )
+    assert kept == []
+    assert excluded == 1
+    assert reasons == {"matched 1/2 concepts (need ≥2)": 1}

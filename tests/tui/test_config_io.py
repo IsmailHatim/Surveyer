@@ -385,3 +385,24 @@ def test_concept_mode_and_review_margin_round_trip(tmp_path):
     reparsed = extract_form(doc)
     assert reparsed.concept_mode == "min:2"
     assert reparsed.review_margin == 0.2
+
+
+def test_keyword_gate_roundtrips():
+    """keyword_gate is read, written, and re-read correctly."""
+    doc = tomlkit.parse(
+        '[project]\nname="x"\n[search]\nsources=["openalex"]\nqueries=[]\n'
+        '[filter]\nkeyword_gate = "hard"\n'
+    )
+    values = extract_form(doc)
+    assert values.keyword_gate == "hard"
+    apply_form(doc, values)
+    assert 'keyword_gate = "hard"' in tomlkit.dumps(doc)
+
+
+def test_keyword_gate_defaults_soft_when_absent():
+    """A config with no keyword_gate reads back the default 'soft'."""
+    doc = tomlkit.parse(
+        '[project]\nname="x"\n[search]\nsources=["openalex"]\nqueries=[]\n'
+    )
+    values = extract_form(doc)
+    assert values.keyword_gate == "soft"
