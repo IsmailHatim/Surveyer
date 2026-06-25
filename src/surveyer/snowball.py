@@ -73,6 +73,8 @@ class OpenAlexSnowball:
         resolved = 0
         backward = 0
         forward = 0
+        backward_total = 0  # references available across seeds (pre-cap)
+        forward_total = 0  # citing works available across seeds (API meta.count)
         want_back = cfg.direction in ("backward", "both")
         want_fwd = cfg.direction in ("forward", "both")
 
@@ -86,15 +88,17 @@ class OpenAlexSnowball:
             resolved += 1
             if want_back:
                 ref_ids = [_bare_id(u) for u in work.get("referenced_works", [])]
-                ref_ids = [r for r in ref_ids if r][: cfg.max_results_per_seed]
-                recs = self._works_by_ids(ref_ids)
+                ref_ids = [r for r in ref_ids if r]
+                backward_total += len(ref_ids)
+                recs = self._works_by_ids(ref_ids[: cfg.max_results_per_seed])
                 _tag(recs, "snowball:backward")
                 backward += len(recs)
                 candidates.extend(recs)
             if want_fwd:
                 wid = _bare_id(work.get("id"))
                 if wid:
-                    recs = self._citing(wid, cfg.max_results_per_seed)
+                    recs, citing_total = self._citing(wid, cfg.max_results_per_seed)
+                    forward_total += citing_total
                     _tag(recs, "snowball:forward")
                     forward += len(recs)
                     candidates.extend(recs)
@@ -112,12 +116,14 @@ class OpenAlexSnowball:
                 query_label="snowball:backward",
                 requested=cfg.max_results_per_seed,
                 retrieved=backward,
+                api_total=backward_total if want_back else None,
             ),
             QueryRetrieval(
                 source="openalex",
                 query_label="snowball:forward",
                 requested=cfg.max_results_per_seed,
                 retrieved=forward,
+                api_total=forward_total if want_fwd else None,
             ),
         ]
         return SnowballFetch(
@@ -154,11 +160,12 @@ class OpenAlexSnowball:
             out.extend(parse_openalex(raw))
         return out
 
-    def _citing(self, work_id: str, cap: int) -> list[Record]:
+    def _citing(self, work_id: str, cap: int) -> tuple[list[Record], int]:
         """Fetch works citing work_id (forward), paginated up to cap."""
         per_page = min(cap, PAGE_SIZE)
         out: list[Record] = []
         page = 1
+        api_total = 0
         while len(out) < cap:
             raw = self.client.get_json(
                 API,
@@ -168,12 +175,14 @@ class OpenAlexSnowball:
                     "page": page,
                 },
             )
+            if page == 1:
+                api_total = int(raw.get("meta", {}).get("count", 0) or 0)
             batch = parse_openalex(raw)
             out.extend(batch)
             if len(batch) < per_page:
                 break
             page += 1
-        return out[:cap]
+        return out[:cap], api_total
 
 
 def _tag(records: list[Record], label: str) -> None:
@@ -294,9 +303,14 @@ def run_snowball(
     )
 
     if resolve_bibtex:
-        from surveyer.bibtex import build_resolver
+        from surveyer.bibtex import build_resolver, extract_bibtex_keys
 
-        build_resolver(cache_root, refresh=refresh).resolve_all(kept_b)
+        # Reserve the baseline's existing keys so newly synthesized local keys for
+        # snowball candidates don't collide with entries already in the workbook.
+        seed_keys = extract_bibtex_keys(baseline.included + baseline.excluded)
+        build_resolver(cache_root, refresh=refresh).resolve_all(
+            kept_b, seed_keys=seed_keys
+        )
 
     ledger = Ledger(
         included=0,
