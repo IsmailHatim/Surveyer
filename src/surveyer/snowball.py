@@ -204,11 +204,19 @@ def snowball_stage(
     fresh, seen_dupes = split_already_screened(deduped, baseline)
 
     # Keyword filter, then LLM filter, mirroring the main pipeline.
+    gate = cfg.filter.keyword_gate
+    if gate == "soft" and not cfg.filter.llm.enabled:
+        gate = "hard"
+        log.warning(
+            "filter.soft_gate_downgraded",
+            reason="keyword_gate=soft has no LLM judge; using hard gate",
+        )
     after_kw, excluded_kw, kw_reasons = apply_keyword_filter(
         fresh,
         cfg.filter.keyword,
         concepts=cfg.filter.concepts,
         concept_mode=cfg.filter.concept_mode,
+        gate=gate,
     )
     kept_kw_ids = {id(r) for r in after_kw}
     excluded: list[Record] = [r for r in fresh if id(r) not in kept_kw_ids]
