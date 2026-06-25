@@ -56,3 +56,7 @@ models, cryptographic building blocks, and robustness to poisoning.
 enabled = true
 direction = "both"
 max_results_per_seed = 200
+
+# Must-cite:
+[seed]
+ids = ["10.1109/TPAMI.2023.123", "CorpusID:268417919", "arXiv:2409.07825"]

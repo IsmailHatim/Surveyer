@@ -17,6 +17,7 @@ from surveyer.config import (
     LLMConfig,
     ProjectConfig,
     SearchConfig,
+    SeedConfig,
     SnowballConfig,
     load_config,
 )
@@ -41,6 +42,7 @@ _DEDUP_DEFAULTS = DedupConfig()
 _FILTER_DEFAULTS = FilterConfig()
 _LLM_DEFAULTS = LLMConfig()
 _SNOWBALL_DEFAULTS = SnowballConfig()
+_SEED_DEFAULTS = SeedConfig()
 
 
 class ConceptItem(msgspec.Struct, kw_only=True):
@@ -79,6 +81,7 @@ class FormValues(msgspec.Struct, kw_only=True):
     )
     search_concepts: list[ConceptItem] = []
     filter_concepts: list[ConceptItem] = []
+    seed_ids: list[str] = []
 
 
 def load_document(path: str | Path) -> TOMLDocument:
@@ -174,6 +177,9 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         snowball = doc.get("snowball", {})
         if snowball:
             _expect_table(snowball, "snowball")
+        seed = doc.get("seed", {})
+        if seed:
+            _expect_table(seed, "seed")
     except (AttributeError, TypeError) as exc:
         raise ValueError(f"Invalid config shape: {exc}") from exc
 
@@ -208,6 +214,7 @@ def extract_form(doc: TOMLDocument) -> FormValues:
         ),
         search_concepts=_read_concepts(search.get("concepts")),
         filter_concepts=_read_concepts(flt.get("concepts")),
+        seed_ids=[str(s) for s in seed.get("ids", [])] if seed else [],
     )
 
 
@@ -272,6 +279,16 @@ def apply_form(doc: TOMLDocument, values: FormValues) -> None:
         _set(snowball, "enabled", values.snowball_enabled)
         _set(snowball, "direction", values.snowball_direction)
         _set(snowball, "max_results_per_seed", values.snowball_max_results_per_seed)
+
+    if values.seed_ids:
+        seed = _table(doc, "seed")
+        _set(seed, "ids", values.seed_ids)
+    elif "seed" in doc:
+        seed = doc["seed"]
+        if "ids" in seed:
+            del seed["ids"]
+        if not seed:
+            del doc["seed"]
 
 
 def validate_text(text: str) -> str | None:

@@ -45,3 +45,13 @@ def test_prisma_text_no_flag_when_complete():
     )
     text = DashboardScreen._prisma_text(led, fetch_only=False, output_dir="out")
     assert "capped below API total" not in text
+
+
+def test_prisma_text_includes_seed_rows():
+    """When seed ledger is present, a 'seeds pinned' row is included."""
+    from surveyer.models import SeedLedger
+
+    led = Ledger(included=3, seed=SeedLedger(imported=2, resolved=2, pinned=2))
+    text = DashboardScreen._prisma_text(led, fetch_only=False, output_dir="runs/x")
+    assert "seeds pinned" in text
+    assert "2" in text

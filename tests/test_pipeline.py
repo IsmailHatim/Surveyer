@@ -431,3 +431,119 @@ def test_soft_gate_downgrades_without_llm(tmp_path):
         resolve_bibtex=False,
     )
     assert result.ledger.excluded_keyword == 1
+
+
+def test_seeds_force_included_bypassing_filters(tmp_path):
+    from surveyer.config import SeedConfig
+    from surveyer.models import Record, SeedLedger
+
+    class FakeSeedResolver:
+        def resolve(self, ids, *, cancel=None):
+            rec = Record(
+                title="Must cite survey",
+                abstract="cooking recipes",  # would fail the LLM judge if screened
+                doi="10.9/seed",
+                sources=["seed"],
+                query_labels=["seed:s2"],
+                screening_status="include",
+            )
+            return [rec], SeedLedger(imported=1, resolved=1)
+
+    cfg = _cfg(tmp_path)
+    cfg.seed = SeedConfig(ids=["10.9/seed"])
+    result = run_pipeline(
+        cfg,
+        registry={"fake": FakeSource()},
+        scorer=FakeScorer(),
+        resolve_bibtex=False,
+        seed_resolver=FakeSeedResolver(),
+    )
+    titles = [r.title for r in result.kept]
+    assert "Must cite survey" in titles  # pinned despite off-topic abstract
+    assert result.ledger.seed is not None
+    assert result.ledger.seed.pinned == 1
+    assert result.ledger.included == 1  # main arm only (the relevant paper)
+    assert result.ledger.total_included() == 2  # main arm + pinned seed
+
+
+def test_seed_not_double_included_via_snowball(tmp_path):
+    from surveyer.config import SeedConfig, SnowballConfig
+    from surveyer.models import Record, SeedLedger
+    from surveyer.snowball import SnowballFetch
+
+    class FakeSeedResolver:
+        def resolve(self, ids, *, cancel=None):
+            rec = Record(
+                title="Seed paper",
+                abstract="relevant",
+                doi="10.9/seed",
+                sources=["seed"],
+                query_labels=["seed:s2"],
+                screening_status="include",
+            )
+            return [rec], SeedLedger(imported=1, resolved=1)
+
+    class FakeSnowball:
+        def fetch(self, seeds, sb_cfg, *, cancel=None):
+            # snowball re-discovers the very same paper that was seeded
+            return SnowballFetch(
+                candidates=[Record(title="Seed paper", abstract="relevant", doi="10.9/seed")],
+                seeds_total=len(seeds),
+                seeds_resolved=len(seeds),
+                backward=1,
+                forward=0,
+                retrieval=[],
+            )
+
+    cfg = _cfg(tmp_path)
+    cfg.seed = SeedConfig(ids=["10.9/seed"])
+    cfg.snowball = SnowballConfig(enabled=True, direction="both")
+    result = run_pipeline(
+        cfg,
+        registry={"fake": FakeSource()},
+        scorer=FakeScorer(),
+        resolve_bibtex=False,
+        seed_resolver=FakeSeedResolver(),
+        snowball=FakeSnowball(),
+    )
+    assert [r.doi for r in result.kept].count("10.9/seed") == 1
+
+
+def test_seed_collapses_fetched_duplicate(tmp_path):
+    from surveyer.config import SeedConfig
+    from surveyer.models import Record, SeedLedger, SearchResult
+
+    class DupSource:
+        name = "fake"
+
+        def search(self, terms, *, max_results):
+            return SearchResult(
+                records=[
+                    Record(title="Seed paper", abstract="x", doi="10.9/seed"),
+                ]
+            )
+
+    class FakeSeedResolver:
+        def resolve(self, ids, *, cancel=None):
+            rec = Record(
+                title="Seed paper",
+                abstract="x",
+                doi="10.9/seed",
+                sources=["seed"],
+                query_labels=["seed:s2"],
+                screening_status="include",
+            )
+            return [rec], SeedLedger(imported=1, resolved=1)
+
+    cfg = _cfg(tmp_path)
+    cfg.seed = SeedConfig(ids=["10.9/seed"])
+    result = run_pipeline(
+        cfg,
+        registry={"fake": DupSource()},
+        scorer=FakeScorer(),
+        resolve_bibtex=False,
+        seed_resolver=FakeSeedResolver(),
+    )
+    # The fetched copy is collapsed into the seed; the paper appears exactly once.
+    assert [r.doi for r in result.kept].count("10.9/seed") == 1
+    assert result.ledger.seed.collapsed_fetched == 1

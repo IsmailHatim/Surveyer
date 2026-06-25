@@ -429,3 +429,46 @@ def test_keyword_gate_defaults_soft_when_absent():
     )
     values = extract_form(doc)
     assert values.keyword_gate == "soft"
+
+
+def test_seed_ids_round_trip():
+    import msgspec
+
+    doc = tomlkit.parse(
+        """
+[project]
+name = "t"
+[search]
+sources = ["openalex"]
+queries = [{label = "A", terms = "x"}]
+[seed]
+ids = ["10.1/a", "CorpusID:5"]
+"""
+    )
+    values = extract_form(doc)
+    assert values.seed_ids == ["10.1/a", "CorpusID:5"]
+
+    # Mutating and re-applying preserves the new list.
+    values = msgspec.structs.replace(values, seed_ids=["10.1/b"])
+    apply_form(doc, values)
+    assert doc["seed"]["ids"] == ["10.1/b"]
+
+
+def test_seed_ids_empty_removes_table():
+    import msgspec
+
+    doc = tomlkit.parse(
+        """
+[project]
+name = "t"
+[search]
+sources = ["openalex"]
+queries = [{label = "A", terms = "x"}]
+[seed]
+ids = ["10.1/a"]
+"""
+    )
+    values = extract_form(doc)
+    values = msgspec.structs.replace(values, seed_ids=[])
+    apply_form(doc, values)
+    assert "seed" not in doc

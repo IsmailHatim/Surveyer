@@ -5,7 +5,28 @@ import json
 import httpx
 
 from surveyer.sources.base import HttpClient
-from surveyer.sources.semantic_scholar import SemanticScholarSource, parse_s2
+from surveyer.sources.semantic_scholar import SemanticScholarSource, parse_s2, parse_s2_paper
+
+
+def test_parse_s2_paper_single():
+    p = {
+        "title": "MUSE: Multimodal Patient Representation",
+        "externalIds": {"DOI": "10.1/muse", "CorpusId": 268417919},
+        "year": 2024,
+        "venue": "ICLR",
+        "citationCount": 9,
+        "url": "https://www.semanticscholar.org/paper/abc",
+        "authors": [{"name": "L. Wu"}],
+        "abstract": "We learn multimodal patient representations.",
+    }
+    r = parse_s2_paper(p)
+    assert r.title.startswith("MUSE")
+    assert r.doi == "10.1/muse"
+    assert r.year == 2024
+    assert r.venue == "ICLR"
+    assert r.n_citations == 9
+    assert r.authors == ["L. Wu"]
+    assert r.abstract.startswith("We learn")
 
 
 def test_parse_s2(fixtures_dir):

@@ -638,3 +638,63 @@ def test_keyword_gate_rejects_unknown(tmp_path):
 
     with pytest.raises(ValueError, match="keyword_gate"):
         load_config(_write(tmp_path, '[filter]\nkeyword_gate = "bogus"\n'))
+
+
+# --- Task 1: SeedConfig block + validation ---
+
+
+def test_seed_block_parsed(tmp_path):
+    from surveyer.config import load_config
+
+    cfg_path = tmp_path / "s.toml"
+    cfg_path.write_text(
+        """
+[project]
+name = "t"
+[search]
+sources = ["openalex"]
+queries = [{label = "A", terms = "x"}]
+[seed]
+ids = ["10.1/a", "CorpusID:123", "arXiv:2409.07825"]
+"""
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.seed is not None
+    assert cfg.seed.ids == ["10.1/a", "CorpusID:123", "arXiv:2409.07825"]
+
+
+def test_seed_block_absent_is_none(tmp_path):
+    from surveyer.config import load_config
+
+    cfg_path = tmp_path / "s.toml"
+    cfg_path.write_text(
+        """
+[project]
+name = "t"
+[search]
+sources = ["openalex"]
+queries = [{label = "A", terms = "x"}]
+"""
+    )
+    assert load_config(cfg_path).seed is None
+
+
+def test_seed_blank_id_rejected(tmp_path):
+    import pytest
+
+    from surveyer.config import load_config
+
+    cfg_path = tmp_path / "s.toml"
+    cfg_path.write_text(
+        """
+[project]
+name = "t"
+[search]
+sources = ["openalex"]
+queries = [{label = "A", terms = "x"}]
+[seed]
+ids = ["10.1/a", "   "]
+"""
+    )
+    with pytest.raises(ValueError, match="seed.ids"):
+        load_config(cfg_path)

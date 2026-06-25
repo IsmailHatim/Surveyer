@@ -153,6 +153,11 @@ class DashboardScreen(Screen):
                     yield Static("extend", classes="section-title")
                     yield Label("Screened xlsx (blank = off; needs xlsx export)")
                     yield Input(value=v.extend_xlsx, id="extend_xlsx")
+
+                    yield Static("seed", classes="section-title")
+                    yield Label("Must-cite ids (comma-separated DOIs / S2 ids)")
+                    yield Input(value=", ".join(v.seed_ids), id="seed_ids")
+
                     yield Static("snowball", classes="section-title")
                     yield Checkbox(
                         "Citation chasing - snowball included papers via OpenAlex",
@@ -287,6 +292,11 @@ class DashboardScreen(Screen):
                 ),
                 search_concepts=search_concepts,
                 filter_concepts=filter_concepts,
+                seed_ids=[
+                    t.strip()
+                    for t in self.query_one("#seed_ids", Input).value.split(",")
+                    if t.strip()
+                ],
             )
         except ValueError as exc:
             self._write_log(f"Invalid form value: {exc}")
@@ -517,7 +527,13 @@ class DashboardScreen(Screen):
             if led.snowball is not None:
                 rows.append(("citation-search identified", led.snowball.identified))
                 rows.append(("citation-search included", led.snowball.included))
-            if led.previously_included or led.snowball is not None:
+            if led.seed is not None:
+                rows.append(("seeds pinned", led.seed.pinned))
+            if (
+                led.previously_included
+                or led.snowball is not None
+                or led.seed is not None
+            ):
                 rows.append(("included (total)", led.total_included()))
         lines = ["", "========== PRISMA flow =========="]
         lines += [f" {label:<20}{value:>7}" for label, value in rows]

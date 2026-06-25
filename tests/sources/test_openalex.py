@@ -8,6 +8,7 @@ from surveyer.sources.base import HttpClient
 from surveyer.sources.openalex import (
     OpenAlexSource,
     parse_openalex,
+    parse_openalex_work,
     reconstruct_abstract,
 )
 
@@ -15,6 +16,26 @@ from surveyer.sources.openalex import (
 def test_reconstruct_abstract():
     idx = {"Deep": [0], "secure": [1], "models": [2]}
     assert reconstruct_abstract(idx) == "Deep secure models"
+
+
+def test_parse_openalex_work_single():
+    w = {
+        "title": "Graph Completion Network",
+        "doi": "https://doi.org/10.1109/TPAMI.2023.1",
+        "publication_year": 2023,
+        "cited_by_count": 42,
+        "authorships": [{"author": {"display_name": "Z. Lian"}}],
+        "primary_location": {"source": {"display_name": "TPAMI"}},
+        "abstract_inverted_index": {"Missing": [0], "modality": [1]},
+    }
+    r = parse_openalex_work(w)
+    assert r.title == "Graph Completion Network"
+    assert r.doi == "10.1109/TPAMI.2023.1"
+    assert r.year == 2023
+    assert r.n_citations == 42
+    assert r.authors == ["Z. Lian"]
+    assert r.venue == "TPAMI"
+    assert r.abstract == "Missing modality"
 
 
 def test_parse_openalex(fixtures_dir):
