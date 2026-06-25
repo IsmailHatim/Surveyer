@@ -127,6 +127,12 @@ def _set_concepts(section_table, items: list[ConceptItem]) -> None:
             del table[key]
     for key, synonyms in desired.items():
         _set(table, key, synonyms)
+    # Persist reordering
+    if list(table.keys()) != list(desired.keys()):
+        for key in desired:
+            value = table[key]
+            del table[key]
+            table[key] = value
 
 
 def _read_concepts(raw: Any) -> list[ConceptItem]:
