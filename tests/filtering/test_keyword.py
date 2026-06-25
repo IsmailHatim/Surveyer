@@ -215,6 +215,71 @@ def test_soft_gate_include_advisory():
     assert kept[0].keyword_note == "no included keyword (advisory)"
 
 
+def test_exclude_does_not_match_substring_of_longer_word():
+    # "review" must not exclude a paper that is merely "peer-reviewed".
+    cfg = KeywordConfig(include=[], exclude=["review"])
+    rec = Record(title="A peer-reviewed empirical study", abstract="")
+    kept, excluded, reasons = apply_keyword_filter([rec], cfg)
+    assert [r.title for r in kept] == [rec.title]
+    assert excluded == 0
+    assert reasons == {}
+
+
+def test_exclude_matches_whole_word():
+    # The whole word "review" still excludes.
+    cfg = KeywordConfig(include=[], exclude=["review"])
+    rec = Record(title="A review of methods", abstract="")
+    kept, excluded, reasons = apply_keyword_filter([rec], cfg)
+    assert kept == []
+    assert excluded == 1
+    assert reasons == {"contains 'review'": 1}
+
+
+def test_concept_does_not_match_substring_of_longer_word():
+    # "ai" must not match "domain"/"training"; "ml" must not match "HTML".
+    concepts = {"ai": ["ai"], "ml": ["ml"]}
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="Domain training over HTML pages", abstract="")
+    kept, excluded, reasons = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all"
+    )
+    assert kept == []
+    assert excluded == 1
+    assert reasons == {"matched 0/2 concepts (need ≥2)": 1}
+
+
+def test_concept_matches_whole_word():
+    concepts = {"ai": ["ai"], "ml": ["ml"]}
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="AI and ML for science", abstract="")
+    kept, excluded, _ = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all"
+    )
+    assert [r.title for r in kept] == [rec.title]
+    assert excluded == 0
+
+
+def test_include_does_not_match_substring_of_longer_word():
+    cfg = KeywordConfig(include=["ml"], exclude=[])
+    rec = Record(title="Parsing HTML documents", abstract="")
+    kept, excluded, reasons = apply_keyword_filter([rec], cfg)
+    assert kept == []
+    assert excluded == 1
+    assert reasons == {"no included keyword": 1}
+
+
+def test_multiword_synonym_still_matches():
+    # Multi-word terms still match as a phrase with word boundaries.
+    concepts = {"graph": ["graph neural network"]}
+    cfg = KeywordConfig(include=[], exclude=[])
+    rec = Record(title="A graph neural network for biology", abstract="")
+    kept, excluded, _ = apply_keyword_filter(
+        [rec], cfg, concepts=concepts, concept_mode="all"
+    )
+    assert [r.title for r in kept] == [rec.title]
+    assert excluded == 0
+
+
 def test_hard_gate_unchanged_default():
     # Default gate is hard: existing drop behavior preserved.
     concepts = {"graph": ["gnn"], "multimodal": ["multimodal"]}
