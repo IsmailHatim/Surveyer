@@ -96,11 +96,19 @@ def run_pipeline(
         ledger.previously_included = len(baseline.included)
 
     # 3. Keyword filter
+    gate = cfg.filter.keyword_gate
+    if gate == "soft" and not cfg.filter.llm.enabled:
+        gate = "hard"
+        log.warning(
+            "filter.soft_gate_downgraded",
+            reason="keyword_gate=soft has no LLM judge; using hard gate",
+        )
     after_kw, excluded_kw, kw_reasons = apply_keyword_filter(
         deduped,
         cfg.filter.keyword,
         concepts=cfg.filter.concepts,
         concept_mode=cfg.filter.concept_mode,
+        gate=gate,
     )
     ledger.excluded_keyword = excluded_kw
     ledger.excluded_keyword_reasons = kw_reasons
