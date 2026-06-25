@@ -112,7 +112,9 @@ def test_forward_is_capped(tmp_path):
             per = int(params["per-page"])
             start = (page - 1) * per
             results = [{"title": f"C{i}"} for i in range(start, start + per)]
-            return httpx.Response(200, json={"meta": {"count": 9999}, "results": results})
+            return httpx.Response(
+                200, json={"meta": {"count": 9999}, "results": results}
+            )
         return httpx.Response(200, json={"meta": {"count": 0}, "results": []})
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(many))
@@ -122,6 +124,23 @@ def test_forward_is_capped(tmp_path):
         seeds, SnowballConfig(enabled=True, direction="forward", max_results_per_seed=5)
     )
     assert result.forward == 5
+    rows = {r.query_label: r for r in result.retrieval}
+    # forward retrieved (5) < API total (9999) -> truncation is flagged
+    assert rows["snowball:forward"].api_total == 9999
+    assert rows["snowball:forward"].retrieved == 5
+    # backward direction wasn't requested, so its api_total stays None
+    assert rows["snowball:backward"].api_total is None
+
+
+def test_retrieval_rows_carry_api_total(tmp_path):
+    sb = OpenAlexSnowball(_client(tmp_path))
+    seeds = [Record(title="Seed", doi="10.1/seed")]
+    result = sb.fetch(seeds, SnowballConfig(enabled=True, direction="both"))
+    rows = {r.query_label: r for r in result.retrieval}
+    # seed W1 references W2, W3 -> 2 available references
+    assert rows["snowball:backward"].api_total == 2
+    # forward cites query reports meta.count == 1
+    assert rows["snowball:forward"].api_total == 1
 
 
 def test_snowball_stage_dedups_and_screens(tmp_path):
@@ -140,7 +159,9 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
     # and one that duplicates an already-seen record (dedup-drop).
     def handler(request: httpx.Request) -> httpx.Response:
         if "/doi:" in request.url.path:
-            return httpx.Response(200, json=_work("W1", "Seed", refs=["W2", "W3", "W4"]))
+            return httpx.Response(
+                200, json=_work("W1", "Seed", refs=["W2", "W3", "W4"])
+            )
         flt = request.url.params.get("filter", "")
         if flt.startswith("openalex_id:"):
             return httpx.Response(
@@ -152,8 +173,14 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
                             "title": "Graph neural networks survey",
                             "abstract_inverted_index": {"graph": [0]},
                         },
-                        {"title": "Cooking pasta recipes", "abstract_inverted_index": {"food": [0]}},
-                        {"title": "Already seen paper", "doi": "https://doi.org/10.1/seen"},
+                        {
+                            "title": "Cooking pasta recipes",
+                            "abstract_inverted_index": {"food": [0]},
+                        },
+                        {
+                            "title": "Already seen paper",
+                            "doi": "https://doi.org/10.1/seen",
+                        },
                     ],
                 },
             )
@@ -167,6 +194,7 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
         search=SearchConfig(sources=["openalex"], queries=[]),
         filter=FilterConfig(
             keyword=KeywordConfig(include=["graph"], exclude=[]),
+            keyword_gate="hard",  # explicit hard gate: keyword filter drops before LLM
             llm=LLMConfig(enabled=True, threshold=0.5, survey_abstract="s"),
         ),
         snowball=SnowballConfig(enabled=True, direction="backward"),
@@ -174,13 +202,15 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
 
     class FakeScorer:
         def score(self, survey_abstract, record, *, concepts=None):
-            return (0.9, "ok", {}) if "graph" in (record.abstract or "") else (0.1, "no", {})
+            return (
+                (0.9, "ok", {})
+                if "graph" in (record.abstract or "")
+                else (0.1, "no", {})
+            )
 
     already = [Record(title="Already seen paper", doi="10.1/seen")]
     seeds = [Record(title="Seed", doi="10.1/seed")]
-    kept, excluded, led = snowball_stage(
-        seeds, already, cfg, FakeScorer(), fetcher
-    )
+    kept, excluded, led = snowball_stage(seeds, already, cfg, FakeScorer(), fetcher)
 
     assert [r.title for r in kept] == ["Graph neural networks survey"]
     assert led.seeds == 1
@@ -190,6 +220,58 @@ def test_snowball_stage_dedups_and_screens(tmp_path):
     assert led.excluded_keyword == 1  # "Cooking pasta recipes"
     assert led.included == 1
     assert any(r.exclusion_reason for r in excluded)
+
+
+def test_snowball_soft_gate_keeps_near_miss(tmp_path):
+    """Soft gate: candidate lacking concept words is kept (not keyword-dropped) when LLM is enabled."""
+    from surveyer.config import (
+        FilterConfig,
+        KeywordConfig,
+        LLMConfig,
+        ProjectConfig,
+        SearchConfig,
+        SnowballConfig,
+        SurveyConfig,
+    )
+    from surveyer.snowball import SnowballFetch, snowball_stage
+
+    # A candidate with no concept words — hard gate would drop it, soft gate keeps it.
+    near_miss = Record(
+        title="cited paper without concept words", doi="10.1/c", abstract="something"
+    )
+
+    class FakeSnowball:
+        def fetch(self, seeds, sb_cfg, *, cancel=None):
+            return SnowballFetch(
+                candidates=[near_miss],
+                seeds_total=len(seeds),
+                seeds_resolved=len(seeds),
+                backward=1,
+                forward=0,
+                retrieval=[],
+            )
+
+    class FakeScorer:
+        def score(self, survey_abstract, record, *, concepts=None):
+            return (0.9, "ok", {})
+
+    cfg = SurveyConfig(
+        project=ProjectConfig(name="t", output_dir=str(tmp_path)),
+        search=SearchConfig(sources=["openalex"], queries=[]),
+        filter=FilterConfig(
+            keyword=KeywordConfig(include=["graph"], exclude=[]),
+            llm=LLMConfig(enabled=True, threshold=0.5, survey_abstract="s"),
+        ),
+        snowball=SnowballConfig(enabled=True, direction="backward"),
+    )
+    cfg.filter.keyword_gate = "soft"
+
+    seeds = [Record(title="seed", doi="10.1/seed")]
+    kept, excluded, ledger = snowball_stage(
+        seeds, [], cfg, FakeScorer(), FakeSnowball()
+    )
+    assert any(r.doi == "10.1/c" for r in kept)
+    assert ledger.excluded_keyword == 0
 
 
 def test_run_snowball_appends_to_workbook(tmp_path):

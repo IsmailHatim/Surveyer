@@ -22,6 +22,7 @@ class Record(msgspec.Struct, kw_only=True):
     llm_score: float | None = None
     llm_reason: str | None = None
     exclusion_reason: str | None = None
+    keyword_note: str | None = None  # advisory lexical match note (soft gate)
     screening_status: str | None = None  # "include" | "borderline" | "exclude"
     concept_verdicts: dict[str, str] = {}
     dblp_key: str | None = None

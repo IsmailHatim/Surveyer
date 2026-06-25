@@ -123,6 +123,8 @@ class DashboardScreen(Screen):
                     yield Input(value=", ".join(v.exclude), id="exclude")
                     yield Label("Concept mode (any | all | min:N)")
                     yield Input(value=v.concept_mode, id="concept_mode")
+                    yield Label("Keyword gate (soft | hard)")
+                    yield Input(value=v.keyword_gate, id="keyword_gate")
                     yield Checkbox(
                         "LLM relevance filter", value=v.llm_enabled, id="llm_enabled"
                     )
@@ -269,6 +271,8 @@ class DashboardScreen(Screen):
                 llm_threshold=float(self.query_one("#llm_threshold", Input).value),
                 concept_mode=self.query_one("#concept_mode", Input).value.strip()
                 or "any",
+                keyword_gate=self.query_one("#keyword_gate", Input).value.strip()
+                or "soft",
                 review_margin=float(self.query_one("#review_margin", Input).value),
                 extend_xlsx=self.query_one("#extend_xlsx", Input).value,
                 snowball_enabled=self.query_one("#snowball_enabled", Checkbox).value,

@@ -140,12 +140,23 @@ def _completeness_ledger() -> Ledger:
             SourceCount(source="dblp", count=5),
         ],
         retrieval=[
-            QueryRetrieval(source="openalex", query_label="q1", requested=100,
-                           retrieved=100, api_total=5000),   # truncated
-            QueryRetrieval(source="openalex", query_label="q2", requested=100,
-                           retrieved=180, api_total=4100),   # truncated
-            QueryRetrieval(source="dblp", query_label="q1", requested=100,
-                           retrieved=5, api_total=5),         # complete
+            QueryRetrieval(
+                source="openalex",
+                query_label="q1",
+                requested=100,
+                retrieved=100,
+                api_total=5000,
+            ),  # truncated
+            QueryRetrieval(
+                source="openalex",
+                query_label="q2",
+                requested=100,
+                retrieved=180,
+                api_total=4100,
+            ),  # truncated
+            QueryRetrieval(
+                source="dblp", query_label="q1", requested=100, retrieved=5, api_total=5
+            ),  # complete
         ],
         included=1,
     )
@@ -154,9 +165,9 @@ def _completeness_ledger() -> Ledger:
 def test_build_completeness_aggregation():
     by_src = {c.source: c for c in _build_completeness(_completeness_ledger())}
     oa = by_src["openalex"]
-    assert oa.requested == 100               # per-query cap, shown as-is
-    assert oa.retrieved == 280               # summed across queries
-    assert oa.api_total == 9100              # summed
+    assert oa.requested == 100  # per-query cap, shown as-is
+    assert oa.retrieved == 280  # summed across queries
+    assert oa.api_total == 9100  # summed
     assert oa.truncated is True
     assert oa.partial_total is False
     db = by_src["dblp"]
@@ -168,10 +179,16 @@ def test_build_completeness_aggregation():
 def test_build_completeness_partial_total():
     led = Ledger(
         retrieval=[
-            QueryRetrieval(source="s2", query_label="q1", requested=50,
-                           retrieved=50, api_total=900),
-            QueryRetrieval(source="s2", query_label="q2", requested=50,
-                           retrieved=10, api_total=None),   # unknown
+            QueryRetrieval(
+                source="s2", query_label="q1", requested=50, retrieved=50, api_total=900
+            ),
+            QueryRetrieval(
+                source="s2",
+                query_label="q2",
+                requested=50,
+                retrieved=10,
+                api_total=None,
+            ),  # unknown
         ]
     )
     [c] = _build_completeness(led)
@@ -183,8 +200,13 @@ def test_build_completeness_partial_total():
 def test_build_completeness_all_unknown_total():
     led = Ledger(
         retrieval=[
-            QueryRetrieval(source="gscholar", query_label="q1", requested=20,
-                           retrieved=20, api_total=None),
+            QueryRetrieval(
+                source="gscholar",
+                query_label="q1",
+                requested=20,
+                retrieved=20,
+                api_total=None,
+            ),
         ]
     )
     [c] = _build_completeness(led)

@@ -343,10 +343,16 @@ def _retrieval_ledger():
     return Ledger(
         included=1,
         retrieval=[
-            QueryRetrieval(source="openalex", query_label="q1", requested=100,
-                           retrieved=100, api_total=5000),
-            QueryRetrieval(source="dblp", query_label="q1", requested=100,
-                           retrieved=7, api_total=7),
+            QueryRetrieval(
+                source="openalex",
+                query_label="q1",
+                requested=100,
+                retrieved=100,
+                api_total=5000,
+            ),
+            QueryRetrieval(
+                source="dblp", query_label="q1", requested=100, retrieved=7, api_total=7
+            ),
         ],
     )
 
@@ -360,7 +366,12 @@ def test_export_xlsx_has_retrieval_sheet(tmp_path):
     assert "retrieval" in wb.sheetnames
     header = [c.value for c in wb["retrieval"][1]]
     assert header == [
-        "source", "query_label", "requested", "retrieved", "api_total", "truncated"
+        "source",
+        "query_label",
+        "requested",
+        "retrieved",
+        "api_total",
+        "truncated",
     ]
     first = [c.value for c in wb["retrieval"][2]]
     assert first[0] == "openalex"
@@ -381,8 +392,11 @@ def test_summary_frame_includes_snowball():
     led = Ledger(
         included=3,
         snowball=SnowballLedger(
-            identified=8, duplicates_removed=2, excluded_keyword=1,
-            excluded_llm=1, included=2,
+            identified=8,
+            duplicates_removed=2,
+            excluded_keyword=1,
+            excluded_llm=1,
+            included=2,
         ),
     )
     frame = _summary_frame(led)
@@ -398,7 +412,9 @@ def test_retrieval_frame_includes_snowball_rows():
 
     led = Ledger(
         retrieval=[
-            QueryRetrieval(source="openalex", query_label="q", requested=200, retrieved=5)
+            QueryRetrieval(
+                source="openalex", query_label="q", requested=200, retrieved=5
+            )
         ],
         snowball=SnowballLedger(
             retrieval=[
@@ -418,8 +434,11 @@ def test_retrieval_frame_includes_snowball_rows():
 
 
 def test_status_and_concept_columns_appended():
-    r = Record(title="t", screening_status="borderline",
-               concept_verdicts={"graph": "yes", "multimodal": "no"})
+    r = Record(
+        title="t",
+        screening_status="borderline",
+        concept_verdicts={"graph": "yes", "multimodal": "no"},
+    )
     frame = _to_frame([r], concept_names=["graph", "multimodal"])
     cols = frame.columns
     assert "status" in cols
@@ -445,3 +464,11 @@ def test_summary_frame_includes_borderline_row():
     frame = _summary_frame(Ledger(included=5, borderline=2))
     rows = dict(zip(frame["stage"].to_list(), frame["count"].to_list()))
     assert rows["borderline"] == 2
+
+
+def test_keyword_note_in_export_row():
+    from surveyer.export import _record_row
+
+    r = Record(title="x", keyword_note="matched 2/3 concepts lexically")
+    row = _record_row(r)
+    assert row["keyword_note"] == "matched 2/3 concepts lexically"

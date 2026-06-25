@@ -29,8 +29,12 @@ class FakeSource:
     def search(self, terms, *, max_results):
         return SearchResult(
             records=[
-                Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
-                Record(title="Relevant security paper", abstract="relevant", doi="10.1/a"),
+                Record(
+                    title="Relevant security paper", abstract="relevant", doi="10.1/a"
+                ),
+                Record(
+                    title="Relevant security paper", abstract="relevant", doi="10.1/a"
+                ),
                 Record(title="Off topic cooking", abstract="recipes", doi="10.1/b"),
             ]
         )
@@ -38,7 +42,11 @@ class FakeSource:
 
 class FakeScorer:
     def score(self, survey_abstract, record, *, concepts=None):
-        return (0.9, "ok", {}) if "relevant" in (record.abstract or "") else (0.1, "no", {})
+        return (
+            (0.9, "ok", {})
+            if "relevant" in (record.abstract or "")
+            else (0.1, "no", {})
+        )
 
 
 def _cfg(tmp_path) -> SurveyConfig:
@@ -101,13 +109,15 @@ def test_run_pipeline_end_to_end(tmp_path):
     )
     assert result.ledger.total_identified() == 3
     assert result.ledger.duplicates_removed == 1
-    assert result.ledger.excluded_keyword == 1
+    # Default keyword_gate="soft" with LLM enabled: off-topic records pass keyword
+    # stage (soft) and are dropped by the LLM judge instead.
+    assert result.ledger.excluded_keyword == 0
+    assert result.ledger.excluded_llm == 1
     assert result.ledger.included == 1
     assert (tmp_path / "survey.xlsx").exists()
     assert (tmp_path / "prisma.mmd").exists()  # always written
     led = load_ledger(tmp_path / "ledger.json")
     assert led.included == 1
-    assert result.ledger.excluded_llm == 0
     assert len(result.excluded) == 1
 
 
@@ -206,10 +216,14 @@ def test_extend_pipeline_never_rescores_baseline(tmp_path):
             return SearchResult(
                 records=[
                     Record(
-                        title="Fresh security paper", abstract="relevant", doi="10.1/new"
+                        title="Fresh security paper",
+                        abstract="relevant",
+                        doi="10.1/new",
                     ),
                     # Same DOI as the baseline's kept paper: already screened.
-                    Record(title="Old security paper", abstract="relevant", doi="10.1/old"),
+                    Record(
+                        title="Old security paper", abstract="relevant", doi="10.1/old"
+                    ),
                 ]
             )
 
@@ -370,3 +384,50 @@ def test_run_pipeline_snowball_disabled_by_default(tmp_path):
         resolve_bibtex=False,
     )
     assert result.ledger.snowball is None
+
+
+class _ZeroConceptSource:
+    """Returns one record that matches 0 concepts lexically but has 'relevant' in abstract."""
+
+    name = "fake"
+
+    def search(self, terms, *, max_results):
+        return SearchResult(
+            records=[
+                Record(
+                    title="implies missingness without the words", abstract="relevant"
+                )
+            ]
+        )
+
+
+def test_soft_gate_routes_near_miss_to_llm(tmp_path):
+    """soft gate + LLM enabled: a 0-concept record survives keyword and is scored by LLM."""
+    cfg = _cfg(tmp_path)
+    # Override to soft gate and add concepts so there is something to not match.
+    cfg.filter.keyword_gate = "soft"
+    cfg.filter.concepts = {"graph": ["graph", "network"]}
+    # FakeScorer scores records with 'relevant' in abstract as 0.9 (above 0.5 threshold).
+    scorer = FakeScorer()
+    result = run_pipeline(
+        cfg,
+        registry={"fake": _ZeroConceptSource()},
+        scorer=scorer,
+        resolve_bibtex=False,
+    )
+    assert result.ledger.included == 1
+    assert result.ledger.excluded_keyword == 0
+
+
+def test_soft_gate_downgrades_without_llm(tmp_path):
+    """soft gate + LLM disabled: soft downgrades to hard so the 0-concept record is dropped."""
+    cfg = _cfg(tmp_path)
+    cfg.filter.keyword_gate = "soft"
+    cfg.filter.concepts = {"graph": ["graph", "network"]}
+    cfg.filter.llm = LLMConfig(enabled=False, threshold=0.5, survey_abstract="s")
+    result = run_pipeline(
+        cfg,
+        registry={"fake": _ZeroConceptSource()},
+        resolve_bibtex=False,
+    )
+    assert result.ledger.excluded_keyword == 1

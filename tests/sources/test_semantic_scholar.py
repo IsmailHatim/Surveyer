@@ -49,7 +49,9 @@ def test_s2_search_preserves_quoted_phrases(tmp_path):
         return httpx.Response(200, json={"total": 0, "offset": 0, "data": []})
 
     client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
-    SemanticScholarSource(client).search('"graph neural network" survey', max_results=10)
+    SemanticScholarSource(client).search(
+        '"graph neural network" survey', max_results=10
+    )
     assert seen == ['"graph neural network" survey']
 
 

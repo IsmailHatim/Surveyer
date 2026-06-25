@@ -11,17 +11,26 @@ def _haystack(r: Record) -> str:
     return " ".join(parts).lower()
 
 
-def _exclusion_reason(
+def _exclude_hit(text: str, cfg: KeywordConfig) -> str | None:
+    """Return the first exclude term contained in text, or None."""
+    for term in cfg.exclude:
+        if term.lower() in text:
+            return f"contains '{term}'"
+    return None
+
+
+def _classify(
     record: Record,
     cfg: KeywordConfig,
     concepts: dict[str, list[str]] | None,
     concept_mode: str,
-) -> str | None:
-    """Return the primary reason a record is excluded, or None if it is kept."""
+    gate: str,
+) -> tuple[str | None, str | None]:
+    """Return (drop_reason, keyword_note) for a record."""
     text = _haystack(record)
-    for term in cfg.exclude:
-        if term.lower() in text:
-            return f"contains '{term}'"
+    hit = _exclude_hit(text, cfg)
+    if hit is not None:
+        return hit, None
     if concepts:
         total = len(concepts)
         required = resolve_required_concepts(concept_mode, total)
@@ -31,11 +40,15 @@ def _exclusion_reason(
             if any(syn.lower() in text for syn in synonyms)
         )
         if matched < required:
-            return f"matched {matched}/{total} concepts (need ≥{required})"
-        return None
+            if gate == "soft":
+                return None, f"matched {matched}/{total} concepts lexically"
+            return f"matched {matched}/{total} concepts (need ≥{required})", None
+        return None, None
     if cfg.include and not any(term.lower() in text for term in cfg.include):
-        return "no included keyword"
-    return None
+        if gate == "soft":
+            return None, "no included keyword (advisory)"
+        return "no included keyword", None
+    return None, None
 
 
 def apply_keyword_filter(
@@ -43,12 +56,15 @@ def apply_keyword_filter(
     cfg: KeywordConfig,
     concepts: dict[str, list[str]] | None = None,
     concept_mode: str = "any",
+    gate: str = "hard",
 ) -> tuple[list[Record], int, dict[str, int]]:
     """Return (kept records, number excluded, per-reason exclusion counts)."""
     kept: list[Record] = []
     reasons: dict[str, int] = {}
     for record in records:
-        reason = _exclusion_reason(record, cfg, concepts, concept_mode)
+        reason, note = _classify(record, cfg, concepts, concept_mode, gate)
+        if note is not None:
+            record.keyword_note = note
         if reason is None:
             kept.append(record)
         else:

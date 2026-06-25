@@ -24,14 +24,30 @@ def test_query_retrieval_fields():
 def test_ledger_truncated_sources():
     led = Ledger(
         retrieval=[
-            QueryRetrieval(source="openalex", query_label="q1", requested=100,
-                           retrieved=100, api_total=5000),   # truncated
-            QueryRetrieval(source="openalex", query_label="q2", requested=100,
-                           retrieved=12, api_total=12),       # not truncated
-            QueryRetrieval(source="dblp", query_label="q1", requested=100,
-                           retrieved=5, api_total=5),         # not truncated
-            QueryRetrieval(source="gscholar", query_label="q1", requested=100,
-                           retrieved=10, api_total=None),     # unknown total
+            QueryRetrieval(
+                source="openalex",
+                query_label="q1",
+                requested=100,
+                retrieved=100,
+                api_total=5000,
+            ),  # truncated
+            QueryRetrieval(
+                source="openalex",
+                query_label="q2",
+                requested=100,
+                retrieved=12,
+                api_total=12,
+            ),  # not truncated
+            QueryRetrieval(
+                source="dblp", query_label="q1", requested=100, retrieved=5, api_total=5
+            ),  # not truncated
+            QueryRetrieval(
+                source="gscholar",
+                query_label="q1",
+                requested=100,
+                retrieved=10,
+                api_total=None,
+            ),  # unknown total
         ]
     )
     assert led.truncated_sources() == ["openalex"]
@@ -105,3 +121,7 @@ def test_record_has_screening_fields():
 
 def test_ledger_has_borderline_count():
     assert Ledger().borderline == 0
+
+
+def test_record_keyword_note_defaults_none():
+    assert Record(title="x").keyword_note is None
