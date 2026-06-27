@@ -21,6 +21,12 @@ def _as_list(value) -> list:
     return value if isinstance(value, list) else [value]
 
 
+def _venue_str(value) -> str | None:
+    """Join DBLP's venue field to a string (it can be a list of venues)."""
+    items = [v for v in _as_list(value) if v]
+    return ", ".join(items) if items else None
+
+
 def parse_dblp(raw: dict) -> list[Record]:
     """Parse a DBLP API response into a list of Records."""
     hits = _as_list(raw.get("result", {}).get("hits", {}).get("hit"))
@@ -40,7 +46,7 @@ def parse_dblp(raw: dict) -> list[Record]:
                 doi=info.get("doi"),
                 authors=authors,
                 year=int(year) if year else None,
-                venue=info.get("venue"),
+                venue=_venue_str(info.get("venue")),
                 url=_as_list(ee)[0] if (ee := info.get("ee")) else None,
                 dblp_key=info.get("key"),
             )

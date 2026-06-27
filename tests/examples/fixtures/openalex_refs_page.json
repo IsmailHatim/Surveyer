@@ -1,0 +1,7 @@
+{
+  "results": [
+    {"doi": "https://doi.org/10.1/AAA", "title": "First Referenced Paper"},
+    {"doi": null, "title": "Second Paper Without DOI"},
+    {"doi": "https://doi.org/10.1/CCC", "title": "Third Referenced Paper"}
+  ]
+}

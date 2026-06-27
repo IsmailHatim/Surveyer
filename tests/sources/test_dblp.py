@@ -129,3 +129,43 @@ def test_parse_dblp_tolerates_malformed_authors():
     }
     records = parse_dblp(raw)
     assert records[0].authors == ["Ada", "Bob"]
+
+
+def _make_raw(venue):
+    """Return a minimal DBLP API response dict with the given venue value."""
+    return {
+        "result": {
+            "hits": {
+                "hit": [
+                    {
+                        "info": {
+                            "title": "A chapter",
+                            "year": "2023",
+                            "venue": venue,
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+
+def test_parse_dblp_venue_list_is_joined():
+    """When DBLP returns venue as a list, parse_dblp must coerce it to a joined str."""
+    raw = _make_raw(["Federated Learning", "Lecture Notes in Computer Science"])
+    [rec] = parse_dblp(raw)
+    assert rec.venue == "Federated Learning, Lecture Notes in Computer Science"
+
+
+def test_parse_dblp_venue_scalar_unchanged():
+    """A normal scalar venue string must pass through unchanged."""
+    raw = _make_raw("NeurIPS")
+    [rec] = parse_dblp(raw)
+    assert rec.venue == "NeurIPS"
+
+
+def test_parse_dblp_venue_none():
+    """A missing venue must yield None."""
+    raw = _make_raw(None)
+    [rec] = parse_dblp(raw)
+    assert rec.venue is None
