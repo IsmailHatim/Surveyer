@@ -103,3 +103,32 @@ def test_openalex_search_returns_api_total(tmp_path):
     result = OpenAlexSource(client).search("x", max_results=10)
     assert result.api_total == 5231
     assert [r.title for r in result.records] == ["W"]
+
+
+def test_openalex_source_sends_mailto_when_env_set(tmp_path, monkeypatch):
+    """When OPENALEX_MAILTO is set, the mailto param must appear in every request."""
+    monkeypatch.setenv("OPENALEX_MAILTO", "test@example.com")
+    seen_mailto: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_mailto.append(request.url.params.get("mailto", ""))
+        return httpx.Response(200, json={"meta": {"count": 1}, "results": [{"title": "W"}]})
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    OpenAlexSource(client).search("x", max_results=10)
+    assert all(m == "test@example.com" for m in seen_mailto)
+    assert len(seen_mailto) >= 1
+
+
+def test_openalex_source_no_mailto_when_env_unset(tmp_path, monkeypatch):
+    """When OPENALEX_MAILTO is unset, no mailto param is sent."""
+    monkeypatch.delenv("OPENALEX_MAILTO", raising=False)
+    seen_params: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_params.append(dict(request.url.params))
+        return httpx.Response(200, json={"meta": {"count": 1}, "results": [{"title": "W"}]})
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    OpenAlexSource(client).search("x", max_results=10)
+    assert all("mailto" not in p for p in seen_params)

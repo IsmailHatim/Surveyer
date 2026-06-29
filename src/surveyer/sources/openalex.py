@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 
 from surveyer.models import Record, SearchResult
@@ -11,6 +12,14 @@ API = "https://api.openalex.org/works"
 
 # OpenAlex caps `per-page` at 200 records per request.
 PAGE_SIZE = 200
+
+
+def _polite_params(params: dict) -> dict:
+    """Append OpenAlex polite-pool mailto from OPENALEX_MAILTO env, if set."""
+    email = os.environ.get("OPENALEX_MAILTO", "").strip()
+    if email:
+        return {**params, "mailto": email}
+    return params
 
 
 def reconstruct_abstract(inverted: dict | None) -> str | None:
@@ -85,7 +94,7 @@ class OpenAlexSource:
             params: dict = {"search": terms, "per-page": per_page, "page": page}
             if filters:
                 params["filter"] = ",".join(filters)
-            raw = self.client.get_json(API, params=params)
+            raw = self.client.get_json(API, params=_polite_params(params))
             if api_total is None:
                 api_total = coerce_int((raw.get("meta") or {}).get("count"))
             batch = parse_openalex(raw)
