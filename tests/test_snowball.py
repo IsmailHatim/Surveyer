@@ -274,6 +274,39 @@ def test_snowball_soft_gate_keeps_near_miss(tmp_path):
     assert ledger.excluded_keyword == 0
 
 
+def test_snowball_sends_mailto_when_env_set(tmp_path, monkeypatch):
+    """When OPENALEX_MAILTO is set, all snowball OpenAlex requests include the mailto param."""
+    monkeypatch.setenv("OPENALEX_MAILTO", "snow@example.org")
+    seen_mailto: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_mailto.append(request.url.params.get("mailto", ""))
+        return _handler(request)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    sb = OpenAlexSnowball(client)
+    seeds = [Record(title="Seed", doi="10.1/seed")]
+    sb.fetch(seeds, SnowballConfig(enabled=True, direction="both"))
+    assert len(seen_mailto) >= 1
+    assert all(m == "snow@example.org" for m in seen_mailto)
+
+
+def test_snowball_no_mailto_when_env_unset(tmp_path, monkeypatch):
+    """When OPENALEX_MAILTO is unset, no mailto param appears in snowball requests."""
+    monkeypatch.delenv("OPENALEX_MAILTO", raising=False)
+    seen_params: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_params.append(dict(request.url.params))
+        return _handler(request)
+
+    client = HttpClient(cache_dir=tmp_path, transport=httpx.MockTransport(handler))
+    sb = OpenAlexSnowball(client)
+    seeds = [Record(title="Seed", doi="10.1/seed")]
+    sb.fetch(seeds, SnowballConfig(enabled=True, direction="both"))
+    assert all("mailto" not in p for p in seen_params)
+
+
 def test_run_snowball_appends_to_workbook(tmp_path):
     from openpyxl import load_workbook
 

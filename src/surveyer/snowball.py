@@ -19,7 +19,13 @@ from surveyer.ledger import save_ledger
 from surveyer.models import Ledger, QueryRetrieval, Record, SnowballLedger
 from surveyer.prisma import render_prisma
 from surveyer.sources.base import HttpClient
-from surveyer.sources.openalex import API, PAGE_SIZE, _strip_doi, parse_openalex
+from surveyer.sources.openalex import (
+    API,
+    PAGE_SIZE,
+    _polite_params,
+    _strip_doi,
+    parse_openalex,
+)
 
 log = structlog.get_logger()
 
@@ -141,7 +147,9 @@ class OpenAlexSnowball:
         clean = _strip_doi(doi) or doi.strip()
         url = f"{API}/doi:{clean}"
         try:
-            return self.client.get_json(url, params={"select": "id,referenced_works"})
+            return self.client.get_json(
+                url, params=_polite_params({"select": "id,referenced_works"})
+            )
         except PipelineCancelled:
             raise
         except Exception as exc:  # noqa: BLE001 - any failure means "skip this seed"
@@ -155,7 +163,9 @@ class OpenAlexSnowball:
             chunk = ids[i : i + _BATCH]
             raw = self.client.get_json(
                 API,
-                params={"filter": f"openalex_id:{'|'.join(chunk)}", "per-page": 200},
+                params=_polite_params(
+                    {"filter": f"openalex_id:{'|'.join(chunk)}", "per-page": 200}
+                ),
             )
             out.extend(parse_openalex(raw))
         return out
@@ -169,11 +179,13 @@ class OpenAlexSnowball:
         while len(out) < cap:
             raw = self.client.get_json(
                 API,
-                params={
-                    "filter": f"cites:{work_id}",
-                    "per-page": per_page,
-                    "page": page,
-                },
+                params=_polite_params(
+                    {
+                        "filter": f"cites:{work_id}",
+                        "per-page": per_page,
+                        "page": page,
+                    }
+                ),
             )
             if page == 1:
                 api_total = int(raw.get("meta", {}).get("count", 0) or 0)
